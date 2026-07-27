@@ -62,17 +62,7 @@ class ProgressStreakCard extends StatelessWidget {
                     ),
               ),
 
-              const SizedBox(height: 18),
-
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
-                ),
-                onPressed: () {},
-                icon: const Icon(Icons.redeem_outlined),
-                label: const Text("Lihat Rewards"),
-              ),
+              
 
               const SizedBox(height: 22),
 

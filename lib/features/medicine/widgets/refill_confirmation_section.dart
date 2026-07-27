@@ -5,7 +5,14 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 class RefillConfirmationSection extends StatelessWidget {
-  const RefillConfirmationSection({super.key});
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const RefillConfirmationSection({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +30,11 @@ class RefillConfirmationSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Checkbox(
-            value: false,
-            onChanged: (_) {},
+            value: value,
             activeColor: AppColors.primary,
+            onChanged: (checked) {
+              onChanged(checked ?? false);
+            },
           ),
 
           const SizedBox(width: 10),
@@ -36,8 +45,8 @@ class RefillConfirmationSection extends StatelessWidget {
               child: RichText(
                 text: TextSpan(
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        height: 1.6,
                         color: AppColors.textPrimary,
+                        height: 1.6,
                       ),
                   children: const [
                     TextSpan(

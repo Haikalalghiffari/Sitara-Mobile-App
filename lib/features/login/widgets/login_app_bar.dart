@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Header atas: logo SITARA Health + ikon notifikasi.
+/// Header atas: logo SITARA Health.
 class LoginAppBar extends StatelessWidget {
   const LoginAppBar({super.key});
 
@@ -29,26 +29,15 @@ class LoginAppBar extends StatelessWidget {
               size: 20,
             ),
           ),
+
           const SizedBox(width: AppSpacing.sm),
+
           Text(
             'SITARA Health',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppColors.healthPrimary,
                   fontWeight: FontWeight.w800,
                 ),
-          ),
-          const Spacer(),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.notifications_none_outlined,
-              color: AppColors.textLabel,
-            ),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: AppSpacing.minTouchTarget,
-              minHeight: AppSpacing.minTouchTarget,
-            ),
           ),
         ],
       ),

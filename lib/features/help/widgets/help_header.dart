@@ -36,17 +36,7 @@ class HelpHeader extends StatelessWidget {
           ),
         ),
 
-        IconButton(
-          onPressed: () {
-            // TODO:
-            // Navigasi ke halaman Notification
-          },
-          icon: const Icon(
-            Icons.notifications_none_rounded,
-            color: AppColors.textPrimary,
-            size: 28,
-          ),
-        ),
+        
       ],
     );
   }

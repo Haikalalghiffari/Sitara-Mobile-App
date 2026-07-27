@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
-import '../../../core/theme/spacing.dart';
 
 class RefillSubmitButton extends StatelessWidget {
-  const RefillSubmitButton({super.key});
+  final VoidCallback onPressed;
+
+  const RefillSubmitButton({
+    super.key,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,15 +20,12 @@ class RefillSubmitButton extends StatelessWidget {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: AppRadius.button,
           ),
-          elevation: 0,
         ),
-        onPressed: () {
-          // TODO:
-          // Nanti diarahkan ke halaman Review Permintaan
-        },
+        onPressed: onPressed,
         icon: const Icon(
           Icons.send_rounded,
           size: 22,

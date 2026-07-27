@@ -5,7 +5,12 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 class RefillDetailField extends StatelessWidget {
-  const RefillDetailField({super.key});
+  final TextEditingController controller;
+
+  const RefillDetailField({
+    super.key,
+    required this.controller,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +35,13 @@ class RefillDetailField extends StatelessWidget {
             ),
           ),
           child: TextField(
+            controller: controller,
             maxLines: 6,
             decoration: InputDecoration(
               hintText:
                   "Jelaskan secara singkat penyebab Anda memerlukan pesan ulang obat...",
               hintStyle: TextStyle(
-                color: AppColors.textSecondary.withOpacity(.8),
+                color: AppColors.textSecondary.withValues(alpha: .8),
               ),
               contentPadding: const EdgeInsets.all(20),
               border: InputBorder.none,

@@ -10,8 +10,95 @@ import '../widgets/refill_detail_field.dart';
 import '../widgets/refill_confirmation_section.dart';
 import '../widgets/refill_submit_button.dart';
 
-class MedicineRefillPage extends StatelessWidget {
+class MedicineRefillPage extends StatefulWidget {
   const MedicineRefillPage({super.key});
+
+  @override
+  State<MedicineRefillPage> createState() =>
+      _MedicineRefillPageState();
+}
+
+class _MedicineRefillPageState extends State<MedicineRefillPage> {
+  final TextEditingController detailController =
+      TextEditingController();
+
+  bool isConfirmed = false;
+
+  @override
+  void dispose() {
+    detailController.dispose();
+    super.dispose();
+  }
+
+  void _submitRequest() {
+    final detail = detailController.text.trim();
+
+    // Belum isi & belum centang
+    if (detail.isEmpty && !isConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Silakan isi keterangan dan centang persetujuan terlebih dahulu.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Belum isi
+    if (detail.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Silakan isi keterangan terlebih dahulu.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Kurang dari 20 karakter
+    if (detail.length < 20) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Keterangan minimal 20 karakter.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Belum checklist
+    if (!isConfirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Silakan centang pernyataan persetujuan.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Berhasil
+ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(
+    backgroundColor: Colors.green,
+    duration: Duration(seconds: 1),
+    content: Text(
+      "Permintaan pesan ulang obat berhasil dikirim.",
+    ),
+  ),
+);
+
+// Kembali otomatis ke halaman Logistik Obat
+Future.delayed(const Duration(seconds: 1), () {
+  if (!mounted) return;
+
+  Navigator.pop(context);
+});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,19 +123,6 @@ class MedicineRefillPage extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.primaryContainer,
-              child: const Icon(
-                Icons.person,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ],
       ),
 
       body: SafeArea(
@@ -64,29 +138,40 @@ class MedicineRefillPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
 
-                  RefillStepper(),
+                  const RefillStepper(),
 
-                  SizedBox(height: 28),
+                  const SizedBox(height: 28),
 
-                  RefillMedicineInfoCard(),
+                  const RefillMedicineInfoCard(),
 
-                  SizedBox(height: 32),
+                  const SizedBox(height: 32),
 
-                  RefillReasonSection(),
+                  const RefillReasonSection(),
 
-                  SizedBox(height: 28),
+                  const SizedBox(height: 28),
 
-                  RefillDetailField(),
+                  RefillDetailField(
+                    controller: detailController,
+                  ),
 
-                  SizedBox(height: 32),
+                  const SizedBox(height: 32),
 
-                  RefillConfirmationSection(),
+                  RefillConfirmationSection(
+                    value: isConfirmed,
+                    onChanged: (value) {
+                      setState(() {
+                        isConfirmed = value;
+                      });
+                    },
+                  ),
 
-                  SizedBox(height: 20),
+                  const SizedBox(height: 20),
 
-                  RefillSubmitButton(),
+                  RefillSubmitButton(
+                    onPressed: _submitRequest,
+                  ),
 
-                  SizedBox(height: 30),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),

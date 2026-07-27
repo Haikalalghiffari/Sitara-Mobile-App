@@ -38,7 +38,7 @@ class ProfileSummaryCard extends StatelessWidget {
                 ),
                 child: const CircleAvatar(
                   backgroundImage: AssetImage(
-                    "assets/images/profile_avatar.png",
+                    "assets/images/profile.png",
                   ),
                 ),
               ),
