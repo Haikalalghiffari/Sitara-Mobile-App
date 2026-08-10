@@ -12,7 +12,6 @@ import '../widgets/home_report_button.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
-import '../../report/pages/report_page.dart';
 import '../../progress/pages/progress_page.dart';
 import '../../medicine/pages/medicine_page.dart';
 import '../../profile/pages/profile_page.dart';

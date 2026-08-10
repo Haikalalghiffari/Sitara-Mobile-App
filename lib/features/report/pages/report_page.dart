@@ -12,6 +12,11 @@ import '../widgets/report_symptom_card.dart';
 import '../widgets/report_notes_field.dart';
 import '../widgets/report_submit_button.dart';
 
+import '../../home/pages/home_page.dart';
+import '../../progress/pages/progress_page.dart';
+import '../../medicine/pages/medicine_page.dart';
+import '../../profile/pages/profile_page.dart';
+
 class ReportPage extends StatefulWidget {
   const ReportPage({super.key});
 
@@ -46,6 +51,107 @@ class _ReportPageState extends State<ReportPage> {
   void dispose() {
     notesController.dispose();
     super.dispose();
+  }
+
+  /// Keluhan "Lainnya" tidak menjelaskan apa pun tanpa catatan,
+  /// jadi catatan menjadi wajib ketika opsi ini dipilih.
+  int get _otherSymptomIndex => symptoms.indexOf("Lainnya");
+
+  void _submitReport() {
+    final String notes = notesController.text.trim();
+    final bool hasSymptom = selectedSymptoms.isNotEmpty;
+
+    if (!hasSymptom && notes.isEmpty) {
+      _showMessage(
+        "Silakan lengkapi laporan keluhan terlebih dahulu.",
+        isSuccess: false,
+      );
+      return;
+    }
+
+    if (!hasSymptom) {
+      _showMessage(
+        "Silakan lengkapi semua informasi keluhan.",
+        isSuccess: false,
+      );
+      return;
+    }
+
+    if (selectedSymptoms.contains(_otherSymptomIndex) && notes.isEmpty) {
+      _showMessage(
+        "Silakan isi detail keluhan terlebih dahulu.",
+        isSuccess: false,
+      );
+      return;
+    }
+
+    _showMessage(
+      "Laporan keluhan berhasil dikirim.",
+      isSuccess: true,
+    );
+  }
+
+  void _showMessage(String message, {required bool isSuccess}) {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: isSuccess ? AppColors.success : AppColors.error,
+        content: Text(
+          message,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white,
+              ),
+        ),
+      ),
+    );
+  }
+
+  void _onBottomNavTap(int index) {
+    switch (index) {
+      case 0:
+        // Halaman ini dibuka dari Home, cukup kembali agar tidak
+        // ada HomePage ganda di navigation stack.
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const HomePage(),
+            ),
+          );
+        }
+        break;
+
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ProgressPage(),
+          ),
+        );
+        break;
+
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const MedicinePage(),
+          ),
+        );
+        break;
+
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ProfilePage(),
+          ),
+        );
+        break;
+    }
   }
 
   @override
@@ -123,16 +229,7 @@ class _ReportPageState extends State<ReportPage> {
                             const SizedBox(height: 32),
 
                             ReportSubmitButton(
-                              onPressed: () {
-
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "Laporan berhasil dikirim (UI Demo)",
-                                    ),
-                                  ),
-                                );
-                              },
+                              onPressed: _submitReport,
                             ),
 
                             const SizedBox(height: 24),
@@ -145,8 +242,9 @@ class _ReportPageState extends State<ReportPage> {
               ),
             ),
 
-            const SitaraBottomNavBar(
-              currentIndex: 1,
+            SitaraBottomNavBar(
+              currentIndex: 0,
+              onTap: _onBottomNavTap,
             ),
           ],
         ),

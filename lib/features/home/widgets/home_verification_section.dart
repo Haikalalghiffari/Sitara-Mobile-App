@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
-import '../../../core/theme/radius.dart';
-import '../../../core/theme/spacing.dart';
+
+import '../../ai_vot/pages/ai_vot_page.dart';
 
 class HomeVerificationSection extends StatelessWidget {
   const HomeVerificationSection({super.key});
@@ -61,7 +61,14 @@ class HomeVerificationSection extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AiVotPage(),
+                  ),
+                );
+              },
               icon: const Icon(Icons.camera_alt_outlined),
               label: const Text("Buka Kamera"),
             ),
