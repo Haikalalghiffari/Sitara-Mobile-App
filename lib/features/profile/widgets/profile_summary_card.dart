@@ -4,8 +4,33 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../../login/models/user_profile.dart';
+import '../models/patient_profile.dart';
+
+/// Menampilkan data profil yang diberikan oleh [ProfilePage].
+///
+/// Widget ini sengaja tidak memanggil API sendiri agar tetap murni sebagai
+/// lapisan tampilan.
 class ProfileSummaryCard extends StatelessWidget {
-  const ProfileSummaryCard({super.key});
+  const ProfileSummaryCard({
+    super.key,
+    required this.patient,
+    required this.user,
+  });
+
+  final PatientProfile patient;
+  final UserProfile user;
+
+  /// Backend dapat mengirim `full_name` kosong bila data pasien belum
+  /// dilengkapi petugas, sehingga username dipakai sebagai cadangan.
+  String get _displayName =>
+      patient.fullName.isNotEmpty ? patient.fullName : user.username;
+
+  /// Nomor rekam medis adalah identitas pasien yang ditampilkan pada desain.
+  /// Bila belum terisi, id user dipakai agar chip tidak tampil kosong.
+  String get _identityLabel => patient.medicalRecordNumber.isNotEmpty
+      ? "ID Pasien: ${patient.medicalRecordNumber}"
+      : "ID User: ${user.id}";
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +100,8 @@ class ProfileSummaryCard extends StatelessWidget {
           const SizedBox(height: 18),
 
           Text(
-            "Rohan",
+            _displayName,
+            textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
@@ -94,7 +120,7 @@ class ProfileSummaryCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(30),
             ),
             child: Text(
-              "ID Pasien: SIT-2024-089",
+              _identityLabel,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: AppColors.textSecondary,
                     fontWeight: FontWeight.w500,

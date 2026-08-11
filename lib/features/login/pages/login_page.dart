@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
@@ -23,7 +24,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _nikController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   final LoginController _loginController = LoginController();
@@ -33,30 +34,22 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _nikController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    final nik = _nikController.text.trim();
+    final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
-    if (nik.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("NIK tidak boleh kosong"),
-        ),
-      );
+    if (username.isEmpty) {
+      _showMessage("Username tidak boleh kosong");
       return;
     }
 
     if (password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Password tidak boleh kosong"),
-        ),
-      );
+      _showMessage("Password tidak boleh kosong");
       return;
     }
 
@@ -64,31 +57,63 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = true;
     });
 
-    final user = await _loginController.login(
-      nik: nik,
-      password: password,
-    );
+    try {
+      final profile = await _loginController.login(
+        username: username,
+        password: password,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _isLoading = false;
-    });
+      if (!profile.isActive) {
+        await _loginController.logout();
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showMessage(
+          "Akun Anda sedang tidak aktif. Hubungi petugas Puskesmas.",
+          isError: true,
+        );
+        return;
+      }
 
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("NIK atau Password salah"),
-          backgroundColor: Colors.red,
+      if (!profile.isPatient) {
+        await _loginController.logout();
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showMessage(
+          "Akun ini bukan akun pasien.",
+          isError: true,
+        );
+        return;
+      }
+
+      setState(() => _isLoading = false);
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const HomePage(),
         ),
       );
-      return;
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showMessage(error.message, isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showMessage(ApiException.unexpectedMessage, isError: true);
     }
+  }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const HomePage(),
+  void _showMessage(String message, {bool isError = false}) {
+    final messenger = ScaffoldMessenger.of(context);
+
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.error : null,
       ),
     );
   }
@@ -153,7 +178,7 @@ class _LoginPageState extends State<LoginPage> {
                               });
                             },
 
-                            nikController: _nikController,
+                            usernameController: _usernameController,
 
                             passwordController:
                                 _passwordController,

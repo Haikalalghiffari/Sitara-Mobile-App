@@ -4,8 +4,15 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../models/patient_profile.dart';
+
 class PersonalInformationHeader extends StatelessWidget {
-  const PersonalInformationHeader({super.key});
+  const PersonalInformationHeader({
+    super.key,
+    required this.patient,
+  });
+
+  final PatientProfile patient;
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +116,8 @@ class PersonalInformationHeader extends StatelessWidget {
         //--------------------------------------------------
 
         Text(
-          "Budi Santoso",
+          patient.fullName.isNotEmpty ? patient.fullName : "Belum tersedia",
+          textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -133,19 +141,23 @@ class PersonalInformationHeader extends StatelessWidget {
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: const [
+            children: [
 
-              Icon(
+              const Icon(
                 Icons.verified_user,
                 color: Colors.white,
                 size: 18,
               ),
 
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
 
+              // "Fase Intensif" masih tetap karena fase pengobatan belum
+              // disediakan backend; status aktif sudah memakai data asli.
               Text(
-                "Pasien Aktif • Fase Intensif",
-                style: TextStyle(
+                patient.isActive
+                    ? "Pasien Aktif • Fase Intensif"
+                    : "Pasien Tidak Aktif",
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
                 ),

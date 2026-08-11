@@ -6,8 +6,36 @@ import '../../../core/theme/spacing.dart';
 
 import 'contact_tile.dart';
 
+import '../../login/models/user_profile.dart';
+import '../models/patient_profile.dart';
+
 class PersonalContactCard extends StatelessWidget {
-  const PersonalContactCard({super.key});
+  const PersonalContactCard({
+    super.key,
+    required this.patient,
+    required this.user,
+  });
+
+  final PatientProfile patient;
+  final UserProfile user;
+
+  static const String _unavailable = "Belum tersedia";
+
+  static String _orFallback(String value) =>
+      value.isNotEmpty ? value : _unavailable;
+
+  /// Pengawas Menelan Obat berperan sebagai kontak yang dihubungi petugas,
+  /// sehingga mengisi slot kontak darurat pada desain.
+  String get _pmoContact {
+    final String name = patient.pmoName.trim();
+    final String phone = patient.pmoPhone.trim();
+
+    if (name.isEmpty && phone.isEmpty) return _unavailable;
+    if (name.isEmpty) return phone;
+    if (phone.isEmpty) return name;
+
+    return "$name • $phone";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +80,7 @@ class PersonalContactCard extends StatelessWidget {
                 iconBackground: AppColors.infoContainer,
                 iconColor: AppColors.info,
                 title: "Nomor Telepon",
-                value: "+62 812 3456 7890",
+                value: _orFallback(patient.phone),
                 onTap: () {},
               ),
 
@@ -66,7 +94,7 @@ class PersonalContactCard extends StatelessWidget {
                 iconBackground: AppColors.secondaryContainer,
                 iconColor: AppColors.secondary,
                 title: "Alamat Email",
-                value: "budi.santoso@email.com",
+                value: _orFallback(user.email),
                 onTap: () {},
               ),
 
@@ -79,8 +107,8 @@ class PersonalContactCard extends StatelessWidget {
                 icon: Icons.emergency_outlined,
                 iconBackground: AppColors.errorContainer,
                 iconColor: AppColors.error,
-                title: "Kontak Darurat",
-                value: "Ani Santoso • +62 812 9999 8888",
+                title: "Kontak Darurat (PMO)",
+                value: _pmoContact,
                 onTap: () {},
               ),
             ],

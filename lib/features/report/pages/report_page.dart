@@ -57,6 +57,10 @@ class _ReportPageState extends State<ReportPage> {
   /// jadi catatan menjadi wajib ketika opsi ini dipilih.
   int get _otherSymptomIndex => symptoms.indexOf("Lainnya");
 
+  /// Dicari berdasarkan nama, bukan posisi, agar styling peringatan tetap
+  /// menempel pada gejala yang benar bila urutan daftar berubah.
+  int get _dangerSymptomIndex => symptoms.indexOf("Batuk Berdarah");
+
   void _submitReport() {
     final String notes = notesController.text.trim();
     final bool hasSymptom = selectedSymptoms.isNotEmpty;
@@ -85,10 +89,28 @@ class _ReportPageState extends State<ReportPage> {
       return;
     }
 
+    // Belum ada request ke backend pada tahap ini. Complaint API masih
+    // dibatasi require_nakes, sehingga pasien belum bisa mengirim keluhan
+    // dan isLoading pada ReportSubmitButton sengaja dibiarkan false.
+    // TODO: Kirim POST /complaints ketika endpoint Complaint sudah bisa
+    // diakses oleh role patient, dan pindahkan reset form ke setelah
+    // response berhasil.
     _showMessage(
       "Laporan keluhan berhasil dikirim.",
       isSuccess: true,
     );
+
+    _resetForm();
+  }
+
+  /// Dijalankan setelah SnackBar tampil supaya form tidak terkirim ganda
+  /// dan siap dipakai untuk laporan berikutnya.
+  void _resetForm() {
+    notesController.clear();
+
+    setState(() {
+      selectedSymptoms.clear();
+    });
   }
 
   void _showMessage(String message, {required bool isSuccess}) {
@@ -205,7 +227,7 @@ class _ReportPageState extends State<ReportPage> {
                               (index) => ReportSymptomCard(
                                 title: symptoms[index],
                                 icon: icons[index],
-                                isDanger: index == 4,
+                                isDanger: index == _dangerSymptomIndex,
                                 selected:
                                     selectedSymptoms.contains(index),
                                 onTap: () {

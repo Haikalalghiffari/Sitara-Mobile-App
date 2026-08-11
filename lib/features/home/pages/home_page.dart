@@ -16,8 +16,88 @@ import '../../progress/pages/progress_page.dart';
 import '../../medicine/pages/medicine_page.dart';
 import '../../profile/pages/profile_page.dart';
 
-class HomePage extends StatelessWidget {
+import '../../../core/network/api_exception.dart';
+
+import '../../login/models/user_profile.dart';
+import '../../login/pages/login_page.dart';
+import '../../login/services/auth_service.dart';
+
+import '../../profile/models/patient_profile.dart';
+import '../../profile/services/patient_service.dart';
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final AuthService _authService = AuthService();
+  final PatientService _patientService = PatientService();
+
+  UserProfile? _userProfile;
+  PatientProfile? _patientProfile;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
+    // berulang setiap kali widget di-rebuild.
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    try {
+      final UserProfile user = await _authService.getProfile();
+      final PatientProfile patient =
+          await _patientService.getPatientProfile();
+
+      if (!mounted) return;
+
+      setState(() {
+        _userProfile = user;
+        _patientProfile = patient;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _errorMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
+  /// Memakai [AuthService.logout] yang sudah ada agar tidak ada mekanisme
+  /// pembersihan token baru.
+  Future<void> _handleExpiredSession() async {
+    await _authService.logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
+      ),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,31 +126,36 @@ class HomePage extends StatelessWidget {
 
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
 
-                            SitaraAppBar(),
+                            const SitaraAppBar(),
 
-                            SizedBox(height: 28),
+                            const SizedBox(height: 28),
 
-                            HomeGreetingSection(),
+                            HomeGreetingSection(
+                              patient: _patientProfile,
+                              user: _userProfile,
+                              errorMessage: _errorMessage,
+                              onRetry: _loadProfile,
+                            ),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                            HomeProgressCard(),
+                            const HomeProgressCard(),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                            HomeMedicationTimerCard(),
+                            const HomeMedicationTimerCard(),
 
-                            SizedBox(height: 28),
+                            const SizedBox(height: 28),
 
-                            HomeVerificationSection(),
+                            const HomeVerificationSection(),
 
-                            SizedBox(height: 28),
+                            const SizedBox(height: 28),
 
-                            HomeReportButton(),
+                            const HomeReportButton(),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
                           ],
                         ),
                       ),

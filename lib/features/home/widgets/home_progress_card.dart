@@ -4,6 +4,12 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+// TODO: Integrate Treatment API when a per-patient treatment endpoint is
+// available. Backend saat ini hanya menyediakan GET /treatments ("Get All
+// Treatments") yang mengembalikan treatment seluruh pasien tanpa filter,
+// sehingga belum aman dipakai dari aplikasi pasien. Setelah endpoint per
+// pasien tersedia, hari ke-n, total hari, dan persentase di bawah dihitung
+// dari therapy_start_date dan therapy_end_date.
 class HomeProgressCard extends StatelessWidget {
   const HomeProgressCard({super.key});
 

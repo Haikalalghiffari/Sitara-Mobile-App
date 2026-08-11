@@ -8,13 +8,13 @@ import '../../../shared/widgets/sitara_secondary_button.dart';
 import '../../../shared/widgets/sitara_text_field.dart';
 import 'login_divider.dart';
 
-/// Kartu form login: NIK, password, tombol masuk & daftar.
+/// Kartu form login: username, password, tombol masuk & daftar.
 class LoginFormCard extends StatelessWidget {
   const LoginFormCard({
     super.key,
     required this.obscurePassword,
     required this.onTogglePasswordVisibility,
-    this.nikController,
+    this.usernameController,
     this.passwordController,
     this.onLogin,
     this.onRegister,
@@ -24,7 +24,7 @@ class LoginFormCard extends StatelessWidget {
 
   final bool obscurePassword;
   final VoidCallback onTogglePasswordVisibility;
-  final TextEditingController? nikController;
+  final TextEditingController? usernameController;
   final TextEditingController? passwordController;
   final VoidCallback? onLogin;
   final VoidCallback? onRegister;
@@ -52,11 +52,11 @@ class LoginFormCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SitaraTextField(
-            label: 'NIK atau Nomor Handphone',
+            label: 'Username',
             labelIcon: Icons.person_outline,
-            hint: 'Masukkan 16 digit NIK atau HP',
-            controller: nikController,
-            keyboardType: TextInputType.number,
+            hint: 'Masukkan username Anda',
+            controller: usernameController,
+            keyboardType: TextInputType.text,
           ),
           const SizedBox(height: AppSpacing.xl),
           SitaraTextField(

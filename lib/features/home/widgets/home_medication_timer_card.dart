@@ -4,6 +4,11 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+// TODO: Integrate MedicineSchedule API when a per-patient schedule endpoint is
+// available. Backend saat ini hanya menyediakan GET /medicine-schedules ("Get
+// All Schedules") yang mengembalikan jadwal seluruh pasien, dan responsnya
+// hanya memuat treatment_id tanpa patient_id. Setelah tersedia, countdown dan
+// jam di bawah dihitung dari drink_time jadwal berikutnya.
 class HomeMedicationTimerCard extends StatelessWidget {
   const HomeMedicationTimerCard({super.key});
 

@@ -4,8 +4,15 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../models/patient_profile.dart';
+
 class PersonalHealthCard extends StatelessWidget {
-  const PersonalHealthCard({super.key});
+  const PersonalHealthCard({
+    super.key,
+    required this.patient,
+  });
+
+  final PatientProfile patient;
 
   Widget _buildInfoTile({
     required BuildContext context,
@@ -130,7 +137,9 @@ class PersonalHealthCard extends StatelessWidget {
                 iconBackground: AppColors.infoContainer,
                 iconColor: AppColors.info,
                 title: "Nomor Rekam Medis",
-                value: "RM-2024-001245",
+                value: patient.medicalRecordNumber.isNotEmpty
+                    ? patient.medicalRecordNumber
+                    : "Belum tersedia",
               ),
 
               const Divider(),
