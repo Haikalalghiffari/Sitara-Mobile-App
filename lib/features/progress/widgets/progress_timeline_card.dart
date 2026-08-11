@@ -4,6 +4,13 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Kartu ini sengaja menampilkan empty state, bukan minggu dan persentase
+/// contoh.
+///
+// TODO: Integrasikan timeline setelah backend menyediakan endpoint treatment
+// yang dapat diakses role patient. Minggu ke-n, total minggu, dan persentase
+// dihitung dari therapy_start_date serta therapy_end_date pada
+// TreatmentResponse, sedangkan GET /treatments memakai require_nakes.
 class ProgressTimelineCard extends StatelessWidget {
   const ProgressTimelineCard({super.key});
 
@@ -40,27 +47,11 @@ class ProgressTimelineCard extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          RichText(
-            text: TextSpan(
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-              children: [
-                const TextSpan(
-                  text: "Minggu ke-",
+          Text(
+            "Belum tersedia",
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
-                TextSpan(
-                  text: "7",
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const TextSpan(
-                  text: " dari 24",
-                ),
-              ],
-            ),
           ),
 
           const SizedBox(height: 22),
@@ -68,7 +59,7 @@ class ProgressTimelineCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: LinearProgressIndicator(
-              value: 0.29,
+              value: 0,
               minHeight: 12,
               backgroundColor: AppColors.progressTrack,
               valueColor: const AlwaysStoppedAnimation(
@@ -79,50 +70,15 @@ class ProgressTimelineCard extends StatelessWidget {
 
           const SizedBox(height: 16),
 
+          // Label "Bulan 1 / Sekarang / Bulan 6" dihapus karena mengandaikan
+          // masa pengobatan 6 bulan, padahal durasi sebenarnya hanya diketahui
+          // dari therapy_start_date dan therapy_end_date milik pasien.
           Text(
-            "29% Selesai",
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+            "Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
                 ),
-          ),
-
-          const SizedBox(height: 22),
-
-          Row(
-            children: [
-
-              Expanded(
-                child: Text(
-                  "Bulan 1",
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
-
-              Expanded(
-                child: Center(
-                  child: Text(
-                    "Sekarang",
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                ),
-              ),
-
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    "Bulan 6",
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),

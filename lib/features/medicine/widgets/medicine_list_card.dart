@@ -4,6 +4,14 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Kartu ini sengaja menampilkan empty state, bukan nama obat contoh.
+///
+// TODO: Integrasikan daftar obat setelah backend menyediakan endpoint yang
+// dapat diakses role patient. Nama dan kekuatan obat ada di MedicineResponse
+// (name, strength, unit), sedangkan dosis pasien ada di
+// MedicineScheduleResponse.dosage. Keduanya hanya terhubung ke pasien melalui
+// treatment_id, dan GET /medicines sendiri adalah katalog seluruh obat
+// sehingga tidak boleh ditampilkan sebagai obat milik pasien.
 class MedicineListCard extends StatelessWidget {
   const MedicineListCard({super.key});
 
@@ -36,22 +44,39 @@ class MedicineListCard extends StatelessWidget {
 
           const Divider(height: 1),
 
-          _medicineTile(
-            name: "Rifampisin",
-            dosage: "450mg • 1x Sehari",
-          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
 
-          const Divider(height: 1),
+                Text(
+                  "Data obat belum tersedia",
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
 
-          _medicineTile(
-            name: "Isoniazid",
-            dosage: "300mg • 1x Sehari",
+                const SizedBox(height: 6),
+
+                Text(
+                  "Informasi obat akan muncul setelah data pengobatan tersedia.",
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.5,
+                      ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  /// Dipertahankan untuk dipakai kembali begitu daftar obat pasien dapat
+  /// diambil dari backend, sehingga desain baris obat tidak perlu dibuat ulang.
+  // ignore: unused_element
   Widget _medicineTile({
     required String name,
     required String dosage,

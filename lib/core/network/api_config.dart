@@ -30,4 +30,18 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String profile = '/auth/profile';
   static const String patientProfile = '/patients/profile';
+
+  static const String notifications = '/notifications';
+
+  /// `PUT /notifications/read-all`, menandai seluruh notifikasi milik pemegang
+  /// token sebagai sudah dibaca.
+  static const String notificationsReadAll = '/notifications/read-all';
+
+  /// `DELETE /notifications/{notification_id}`.
+  ///
+  /// Backend tidak menyediakan penghapusan massal, hanya per notifikasi.
+  static String notification(int id) => '/notifications/$id';
+
+  /// `PUT /notifications/{notification_id}/read`, tanpa request body.
+  static String notificationRead(int id) => '/notifications/$id/read';
 }

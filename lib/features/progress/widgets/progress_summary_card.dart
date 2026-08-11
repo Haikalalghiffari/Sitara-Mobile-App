@@ -6,12 +6,24 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Kartu ini sengaja menampilkan empty state, bukan persentase contoh.
+///
+// TODO: Integrasikan kepatuhan setelah backend menyediakan endpoint yang
+// dapat diakses role patient. Data kepatuhan berasal dari
+// VideoVerificationResponse (status: pending/verified/rejected), tetapi
+// response tersebut hanya memuat medicine_schedule_id, yang mengarah ke
+// treatment_id, yang hanya bisa diperoleh dari GET /treatments
+// (require_nakes).
 class ProgressSummaryCard extends StatelessWidget {
-  final double progress;
+  /// Bernilai null selama data kepatuhan belum tersedia dari backend.
+  ///
+  /// Sengaja nullable dan bukan 0, karena menampilkan "0%" berarti menyatakan
+  /// pasien tidak pernah minum obat sama sekali.
+  final double? progress;
 
   const ProgressSummaryCard({
     super.key,
-    this.progress = 0.98,
+    this.progress,
   });
 
   @override
@@ -40,14 +52,16 @@ class ProgressSummaryCard extends StatelessWidget {
             width: 150,
             height: 150,
             child: CustomPaint(
-              painter: _ProgressPainter(progress),
+              painter: _ProgressPainter(progress ?? 0),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
 
                     Text(
-                      "${(progress * 100).round()}%",
+                      progress == null
+                          ? "—"
+                          : "${(progress! * 100).round()}%",
                       style: Theme.of(context)
                           .textTheme
                           .headlineMedium
@@ -89,7 +103,7 @@ class ProgressSummaryCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           Text(
-            "Luar biasa! Anda hampir mencapai target kepatuhan sempurna bulan ini. Tetap konsisten untuk kesembuhan total.",
+            "Data kepatuhan belum tersedia. Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.",
             textAlign: TextAlign.center,
             style: Theme.of(context)
                 .textTheme

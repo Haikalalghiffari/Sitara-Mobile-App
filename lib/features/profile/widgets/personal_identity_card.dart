@@ -5,6 +5,7 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../models/patient_profile.dart';
+import 'profile_notice.dart';
 
 class PersonalIdentityCard extends StatefulWidget {
   const PersonalIdentityCard({
@@ -102,7 +103,10 @@ class _PersonalIdentityCardState extends State<PersonalIdentityCard> {
             const Spacer(),
 
             TextButton.icon(
-              onPressed: () {},
+              onPressed: () => showProfileNotice(
+                context,
+                profileEditUnavailableMessage,
+              ),
 
               icon: const Icon(
                 Icons.edit_outlined,
@@ -278,6 +282,30 @@ class _PersonalIdentityCardState extends State<PersonalIdentityCard> {
                     ),
                   ),
                 ],
+              ),
+
+              const SizedBox(height: 22),
+
+              //------------------------------------------
+              // Alamat
+              //------------------------------------------
+
+              // `address` pada PatientResponse adalah alamat tempat tinggal
+              // pasien, bukan alamat fasilitas kesehatan.
+              Text(
+                "Alamat",
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+
+              const SizedBox(height: 6),
+
+              Text(
+                patient.address.isNotEmpty ? patient.address : _unavailable,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ],
           ),

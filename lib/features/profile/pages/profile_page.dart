@@ -212,9 +212,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
               SizedBox(height: 24),
 
+              // Harus mengikuti `version` pada pubspec.yaml.
               Center(
                 child: Text(
-                  "SITARA Health v2.4.1",
+                  "SITARA Health v1.0.0",
                   style: TextStyle(
                     color: AppColors.textHint,
                     fontSize: 14,

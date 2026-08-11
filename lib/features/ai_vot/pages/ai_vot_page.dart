@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
@@ -9,8 +7,6 @@ import '../../../core/theme/spacing.dart';
 
 import '../models/camera_status.dart';
 import '../models/verification_state.dart';
-import '../services/simulated_verification_service.dart';
-import '../services/verification_service.dart';
 
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/verification_action_button.dart';
@@ -30,11 +26,23 @@ class AiVotPage extends StatefulWidget {
 }
 
 class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
-  /// Diganti dengan implementasi berbasis model AI ketika sudah tersedia.
-  final VerificationService _service = SimulatedVerificationService();
-
-  StreamSubscription<VerificationState>? _subscription;
-  VerificationState _state = VerificationState.ready;
+  /// Selalu [VerificationState.ready] karena tidak ada pipeline verifikasi
+  /// yang dijalankan.
+  ///
+  /// SimulatedVerificationService sengaja tidak dipakai lagi: alur itu selalu
+  /// berakhir pada VerificationState.success setelah jeda waktu, sehingga
+  /// pasien diberi tahu dosisnya "sudah terverifikasi" padahal tidak ada
+  /// deteksi apa pun dan tidak ada data yang terkirim. Berkasnya tetap ada di
+  /// services/simulated_verification_service.dart.
+  ///
+  // TODO: Jalankan pipeline verifikasi sebenarnya setelah dua hal tersedia.
+  // Pertama, model AI on-device sesuai kontrak di ai_detection_service.dart.
+  // Kedua, jalur pengiriman hasil ke backend: saat ini POST
+  // /video-verifications hanya menerima application/json berisi
+  // medicine_schedule_id, video_path, file_name, mime_type, dan file_size —
+  // tidak ada endpoint multipart untuk mengunggah berkas videonya, dan
+  // medicine_schedule_id tidak dapat diperoleh pasien secara sah.
+  final VerificationState _state = VerificationState.ready;
 
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
@@ -49,8 +57,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _subscription?.cancel();
-    _service.cancel();
     _cameraController?.dispose();
     _cameraController = null;
     super.dispose();
@@ -138,19 +144,20 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     };
   }
 
-  void _startVerification() {
-    _subscription?.cancel();
+  /// Kamera tetap berfungsi, tetapi hasilnya belum bisa diverifikasi maupun
+  /// dikirim, sehingga pasien diberi keterangan apa adanya.
+  void _showVerificationUnavailable() {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
-    _subscription = _service.start().listen((state) {
-      if (!mounted) return;
-      setState(() => _state = state);
-    });
-  }
-
-  void _resetVerification() {
-    _subscription?.cancel();
-    _service.cancel();
-    setState(() => _state = VerificationState.ready);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Verifikasi minum obat belum dapat diproses melalui aplikasi. "
+          "Perlihatkan proses minum obat kepada petugas kesehatan.",
+        ),
+      ),
+    );
   }
 
   void _showHelp() {
@@ -221,9 +228,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
                   VerificationActionButton(
                     state: _state,
-                    onStart:
-                        _cameraStatus.isReady ? _startVerification : null,
-                    onRetry: _resetVerification,
+                    onStart: _cameraStatus.isReady
+                        ? _showVerificationUnavailable
+                        : null,
                     onFinish: () => Navigator.pop(context),
                   ),
 

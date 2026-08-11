@@ -33,7 +33,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
                   children: [
 
                     Text(
-                      "Metformin HCl 500mg",
+                      "Data obat belum tersedia",
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
@@ -45,7 +45,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
                     const SizedBox(height: 6),
 
                     Text(
-                      "Dosis: 2× Sehari (Setelah Makan)",
+                      "Informasi dosis belum tersedia.",
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
@@ -62,15 +62,21 @@ class RefillMedicineInfoCard extends StatelessWidget {
                   horizontal: 12,
                   vertical: 8,
                 ),
+                // Status ini menggambarkan kondisi sebenarnya: permintaan
+                // belum dikirim ke mana pun. Warna netral dipakai agar tidak
+                // terbaca sebagai status darurat yang berasal dari backend.
+                // TODO: Tampilkan RefillResponse.status yang sebenarnya
+                // (RefillRequestStatus) setelah POST /refills dapat diakses
+                // role patient.
                 decoration: BoxDecoration(
-                  color: AppColors.errorContainer,
+                  color: AppColors.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: const Text(
-                  "Status:\nPelaporan Darurat",
+                  "Status:\nBelum dikirim",
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: AppColors.error,
+                    color: AppColors.textSecondary,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -119,12 +125,12 @@ class RefillMedicineInfoCard extends StatelessWidget {
                     const SizedBox(height: 6),
 
                     Text(
-                      "0 Tablet (Lapor Hilang/Rusak)",
+                      "Belum tersedia",
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
                           ?.copyWith(
-                            color: AppColors.error,
+                            color: AppColors.textSecondary,
                             fontWeight: FontWeight.bold,
                           ),
                     ),

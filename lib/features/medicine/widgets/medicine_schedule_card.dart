@@ -4,6 +4,13 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Kartu ini sengaja menampilkan empty state, bukan tanggal dan lokasi contoh.
+///
+// TODO: Integrasikan jadwal pengambilan setelah backend menyediakan endpoint
+// yang dapat diakses role patient. ControlScheduleResponse hanya memuat
+// treatment_id, control_date, control_time, status, dan doctor_note; tidak ada
+// nama fasilitas, alamat, latitude, maupun longitude, sehingga tombol
+// "Lihat Peta" belum punya sumber data dan dibiarkan nonaktif.
 class MedicineScheduleCard extends StatelessWidget {
   const MedicineScheduleCard({super.key});
 
@@ -55,12 +62,14 @@ class MedicineScheduleCard extends StatelessWidget {
 
               SizedBox(width: 16),
 
-              Text(
-                "15 Juni 2024",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 34,
+              Expanded(
+                child: Text(
+                  "Belum tersedia",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 34,
+                  ),
                 ),
               ),
             ],
@@ -86,7 +95,7 @@ class MedicineScheduleCard extends StatelessWidget {
                   children: [
 
                     Text(
-                      "Puskesmas Melati",
+                      "Lokasi belum tersedia",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -97,7 +106,7 @@ class MedicineScheduleCard extends StatelessWidget {
                     SizedBox(height: 6),
 
                     Text(
-                      "Jl. Mawar No.12, Jakarta Timur",
+                      "Jadwal akan muncul setelah petugas kesehatan melengkapi data pengambilan obat.",
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 17,
@@ -122,7 +131,7 @@ class MedicineScheduleCard extends StatelessWidget {
                   borderRadius: AppRadius.button,
                 ),
               ),
-              onPressed: () {},
+              onPressed: null,
               icon: const Icon(Icons.map_outlined),
               label: const Text(
                 "Lihat Peta",

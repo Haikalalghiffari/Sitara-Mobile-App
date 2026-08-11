@@ -3,7 +3,19 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 
 class NotificationHeader extends StatelessWidget {
-  const NotificationHeader({super.key});
+  const NotificationHeader({
+    super.key,
+    required this.onMarkAllRead,
+    required this.onDeleteAll,
+    this.isMenuEnabled = true,
+  });
+
+  final VoidCallback onMarkAllRead;
+  final VoidCallback onDeleteAll;
+
+  /// Menu dimatikan ketika daftar kosong, karena tidak ada yang bisa ditandai
+  /// maupun dihapus.
+  final bool isMenuEnabled;
 
   @override
   Widget build(BuildContext context) {
@@ -36,13 +48,25 @@ class NotificationHeader extends StatelessWidget {
         ),
 
         PopupMenuButton<String>(
-          icon: const Icon(
+          enabled: isMenuEnabled,
+          // Menempel pada tombolnya sendiri agar menu tidak keluar layar.
+          position: PopupMenuPosition.under,
+          icon: Icon(
             Icons.more_vert,
-            color: AppColors.primary,
+            color: isMenuEnabled
+                ? AppColors.primary
+                : AppColors.textDisabled,
           ),
           onSelected: (value) {
-            // TODO:
-            // nanti isi menu
+            switch (value) {
+              case "read":
+                onMarkAllRead();
+                break;
+
+              case "delete":
+                onDeleteAll();
+                break;
+            }
           },
           itemBuilder: (context) => const [
             PopupMenuItem(

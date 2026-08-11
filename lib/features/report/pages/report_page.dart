@@ -68,7 +68,7 @@ class _ReportPageState extends State<ReportPage> {
     if (!hasSymptom && notes.isEmpty) {
       _showMessage(
         "Silakan lengkapi laporan keluhan terlebih dahulu.",
-        isSuccess: false,
+        backgroundColor: AppColors.error,
       );
       return;
     }
@@ -76,7 +76,7 @@ class _ReportPageState extends State<ReportPage> {
     if (!hasSymptom) {
       _showMessage(
         "Silakan lengkapi semua informasi keluhan.",
-        isSuccess: false,
+        backgroundColor: AppColors.error,
       );
       return;
     }
@@ -84,27 +84,30 @@ class _ReportPageState extends State<ReportPage> {
     if (selectedSymptoms.contains(_otherSymptomIndex) && notes.isEmpty) {
       _showMessage(
         "Silakan isi detail keluhan terlebih dahulu.",
-        isSuccess: false,
+        backgroundColor: AppColors.error,
       );
       return;
     }
 
-    // Belum ada request ke backend pada tahap ini. Complaint API masih
-    // dibatasi require_nakes, sehingga pasien belum bisa mengirim keluhan
-    // dan isLoading pada ReportSubmitButton sengaja dibiarkan false.
-    // TODO: Kirim POST /complaints ketika endpoint Complaint sudah bisa
-    // diakses oleh role patient, dan pindahkan reset form ke setelah
-    // response berhasil.
+    // Form sudah lengkap, tetapi laporan TIDAK dikirim ke mana pun.
+    //
+    // POST /complaints memakai require_nakes, dan ComplaintCreate mewajibkan
+    // treatment_id yang tidak dapat diperoleh pasien secara sah. Karena itu
+    // isi form sengaja TIDAK direset: pasien masih perlu membacakan keluhannya
+    // kepada petugas kesehatan.
+    //
+    // TODO: Kirim POST /complaints beserta reset form setelah backend
+    // menyediakan endpoint keluhan yang dapat diakses role patient dan cara
+    // sah memperoleh treatment_id miliknya. Saat itu isLoading pada
+    // ReportSubmitButton baru dipakai selama request berlangsung.
     _showMessage(
-      "Laporan keluhan berhasil dikirim.",
-      isSuccess: true,
+      "Laporan belum dapat dikirim melalui aplikasi. Sampaikan keluhan ini kepada petugas kesehatan.",
     );
-
-    _resetForm();
   }
 
-  /// Dijalankan setelah SnackBar tampil supaya form tidak terkirim ganda
-  /// dan siap dipakai untuk laporan berikutnya.
+  /// Dipertahankan untuk dipakai setelah POST /complaints tersedia bagi
+  /// pasien, supaya form dibersihkan hanya ketika laporan benar-benar terkirim.
+  // ignore: unused_element
   void _resetForm() {
     notesController.clear();
 
@@ -113,13 +116,15 @@ class _ReportPageState extends State<ReportPage> {
     });
   }
 
-  void _showMessage(String message, {required bool isSuccess}) {
+  /// [backgroundColor] dibiarkan null untuk pesan informasi, sehingga tidak
+  /// tampil sebagai keberhasilan maupun kegagalan validasi.
+  void _showMessage(String message, {Color? backgroundColor}) {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        backgroundColor: isSuccess ? AppColors.success : AppColors.error,
+        backgroundColor: backgroundColor,
         content: Text(
           message,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(

@@ -6,6 +6,17 @@ import '../../../core/theme/spacing.dart';
 
 import '../models/patient_profile.dart';
 
+/// Hanya Nomor Rekam Medis yang berasal dari backend (PatientResponse).
+///
+/// Fasilitas Kesehatan dan Alamat Fasilitas tidak punya padanan di backend:
+/// PatientResponse, TreatmentResponse, maupun ControlScheduleResponse tidak
+/// memuat nama faskes, alamat faskes, latitude, atau longitude. PatientResponse
+/// memang punya `address`, tetapi itu alamat rumah pasien, bukan alamat
+/// fasilitas, sehingga tidak boleh dipakai di sini.
+///
+/// Dokter Penanggung Jawab ada sebagai TreatmentResponse.doctor_name, tetapi
+/// hanya dapat dijangkau lewat treatment_id yang belum bisa diperoleh pasien
+/// secara sah.
 class PersonalHealthCard extends StatelessWidget {
   const PersonalHealthCard({
     super.key,
@@ -115,7 +126,7 @@ class PersonalHealthCard extends StatelessWidget {
                 iconBackground: AppColors.primaryContainer,
                 iconColor: AppColors.primary,
                 title: "Fasilitas Kesehatan",
-                value: "Puskesmas Melati",
+                value: "Belum tersedia",
               ),
 
               const Divider(),
@@ -126,7 +137,7 @@ class PersonalHealthCard extends StatelessWidget {
                 iconBackground: AppColors.secondaryContainer,
                 iconColor: AppColors.secondary,
                 title: "Dokter Penanggung Jawab",
-                value: "dr. Andi Pratama",
+                value: "Belum tersedia",
               ),
 
               const Divider(),
@@ -150,7 +161,7 @@ class PersonalHealthCard extends StatelessWidget {
                 iconBackground: AppColors.warningContainer,
                 iconColor: AppColors.warning,
                 title: "Alamat Fasilitas",
-                value: "Jl. Mawar No.12, Jakarta Timur",
+                value: "Belum tersedia",
               ),
             ],
           ),

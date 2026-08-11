@@ -12,6 +12,12 @@ class NotificationCard extends StatelessWidget {
   final String time;
   final bool showActions;
 
+  /// Notifikasi yang sudah dibaca tampil lebih tenang: latar sedikit meredup,
+  /// bayangan dilepas, dan titik penanda di samping judul hilang.
+  final bool isRead;
+
+  final VoidCallback? onTap;
+
   const NotificationCard({
     super.key,
     required this.icon,
@@ -20,26 +26,38 @@ class NotificationCard extends StatelessWidget {
     required this.subtitle,
     required this.time,
     this.showActions = false,
+    this.isRead = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: AppRadius.card,
+      onTap: onTap,
+      child: _buildCard(context),
+    );
+  }
+
+  Widget _buildCard(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isRead ? AppColors.surfaceContainerLow : AppColors.surface,
         borderRadius: AppRadius.card,
         border: Border.all(
           color: AppColors.outlineVariant,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: isRead
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,11 +84,35 @@ class NotificationCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: isRead
+                                      ? FontWeight.w600
+                                      : FontWeight.bold,
+                                ),
                       ),
+                    ),
+
+                    if (!isRead) ...[
+                      const SizedBox(width: 10),
+
+                      Container(
+                        width: 10,
+                        height: 10,
+                        margin: const EdgeInsets.only(top: 6),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
 
                 const SizedBox(height: 8),

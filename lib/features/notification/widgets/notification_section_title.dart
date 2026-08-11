@@ -5,11 +5,13 @@ import '../../../core/theme/colors.dart';
 class NotificationSectionTitle extends StatelessWidget {
   final String title;
   final String? actionText;
+  final VoidCallback? onAction;
 
   const NotificationSectionTitle({
     super.key,
     required this.title,
     this.actionText,
+    this.onAction,
   });
 
   @override
@@ -27,10 +29,7 @@ class NotificationSectionTitle extends StatelessWidget {
 
         if (actionText != null)
           TextButton(
-            onPressed: () {
-              // TODO
-              // Tandai semua sudah dibaca
-            },
+            onPressed: onAction,
             child: Text(
               actionText!,
               style: const TextStyle(

@@ -4,31 +4,19 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Grafik ini sengaja menampilkan empty state, bukan batang dengan nilai
+/// contoh.
+///
+// TODO: Integrasikan riwayat mingguan setelah backend menyediakan endpoint
+// verifikasi minum obat yang dapat diakses role patient. Riwayat harian
+// berasal dari verification_date dan status pada VideoVerificationResponse,
+// yang hanya terhubung ke pasien melalui medicine_schedule_id lalu
+// treatment_id, sehingga belum dapat diambil oleh akun pasien.
 class ProgressActivityChart extends StatelessWidget {
   const ProgressActivityChart({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final bars = [
-      45.0,
-      70.0,
-      55.0,
-      85.0,
-      95.0,
-      65.0,
-      100.0,
-    ];
-
-    final days = [
-      "Sen",
-      "Sel",
-      "Rab",
-      "Kam",
-      "Jum",
-      "Sab",
-      "Min",
-    ];
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -85,51 +73,17 @@ class ProgressActivityChart extends StatelessWidget {
 
           const SizedBox(height: 36),
 
+          // Tinggi 220 dipertahankan agar ukuran kartu tidak berubah saat
+          // grafik belum memiliki data.
           SizedBox(
             height: 220,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(
-                bars.length,
-                (index) {
-                  final active = index == 6;
-
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 500),
-                        width: 22,
-                        height: bars[index],
-                        decoration: BoxDecoration(
-                          color: active
-                              ? AppColors.primary
-                              : AppColors.primary.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      Text(
-                        days[index],
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: active
-                                  ? AppColors.primary
-                                  : AppColors.textSecondary,
-                              fontWeight: active
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                      ),
-                    ],
-                  );
-                },
+            child: Center(
+              child: Text(
+                "Riwayat progress belum tersedia",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
               ),
             ),
           ),

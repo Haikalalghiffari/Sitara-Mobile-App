@@ -4,6 +4,13 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Kartu ini sengaja menampilkan empty state, bukan jumlah hari contoh.
+///
+// TODO: Integrasikan runtutan harian setelah backend menyediakan endpoint
+// verifikasi minum obat yang dapat diakses role patient. Backend tidak
+// menyimpan nilai runtutan secara langsung; nilai ini perlu dihitung dari
+// verification_date pada VideoVerificationResponse yang berstatus verified,
+// dan data tersebut belum dapat diakses pasien.
 class ProgressStreakCard extends StatelessWidget {
   const ProgressStreakCard({super.key});
 
@@ -55,19 +62,17 @@ class ProgressStreakCard extends StatelessWidget {
               const SizedBox(height: 18),
 
               Text(
-                "15 Hari Beruntun!",
+                "Belum tersedia",
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
               ),
 
-              
-
               const SizedBox(height: 22),
 
               Text(
-                "Jangan putus semangat, Anda selangkah lebih dekat menuju kesehatan optimal.",
+                "Runtutan harian akan muncul setelah data verifikasi minum obat tersedia.",
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white,
                       height: 1.7,

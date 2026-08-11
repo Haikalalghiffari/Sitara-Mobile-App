@@ -4,37 +4,37 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 
 class NotificationFilterTabs extends StatelessWidget {
-  const NotificationFilterTabs({super.key});
+  const NotificationFilterTabs({
+    super.key,
+    required this.filters,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  /// Label kategori. Ditentukan pemanggil karena kategori yang sah hanya yang
+  /// benar-benar dikenal backend lewat field `type`.
+  final List<String> filters;
+
+  /// Kategori yang sedang aktif, harus salah satu dari [filters].
+  final String selected;
+
+  final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: const [
+        children: [
+          for (final String filter in filters) ...[
+            if (filter != filters.first) const SizedBox(width: 10),
 
-          _FilterChip(
-            label: "Semua",
-            selected: true,
-          ),
-
-          SizedBox(width: 10),
-
-          _FilterChip(
-            label: "Obat",
-          ),
-
-          SizedBox(width: 10),
-
-          _FilterChip(
-            label: "Pesan",
-          ),
-
-          SizedBox(width: 10),
-
-          _FilterChip(
-            label: "Progres",
-          ),
+            _FilterChip(
+              label: filter,
+              selected: filter == selected,
+              onTap: () => onSelected(filter),
+            ),
+          ],
         ],
       ),
     );
@@ -44,9 +44,11 @@ class NotificationFilterTabs extends StatelessWidget {
 class _FilterChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final VoidCallback onTap;
 
   const _FilterChip({
     required this.label,
+    required this.onTap,
     this.selected = false,
   });
 
@@ -54,10 +56,7 @@ class _FilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: AppRadius.button,
-      onTap: () {
-        // TODO
-        // nanti dibuat dengan Riverpod
-      },
+      onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(

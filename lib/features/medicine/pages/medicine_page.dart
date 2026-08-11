@@ -7,7 +7,6 @@ import '../../../shared/widgets/sitara_app_bar.dart';
 import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 
 import '../widgets/medicine_header_section.dart';
-import '../widgets/medicine_warning_card.dart';
 import '../widgets/medicine_stock_card.dart';
 import '../widgets/medicine_schedule_card.dart';
 import '../widgets/medicine_list_card.dart';
@@ -55,10 +54,16 @@ class MedicinePage extends StatelessWidget {
 
                             SizedBox(height: 24),
 
-                            MedicineWarningCard(),
-
-                            SizedBox(height: 24),
-
+                            // MedicineWarningCard sengaja belum dirender.
+                            // Peringatan "stok hampir habis" adalah klaim
+                            // medis yang hanya boleh muncul bila stok pasien
+                            // terbukti rendah dari data backend, sedangkan
+                            // stok tersebut belum dapat diakses akun patient.
+                            // Widget-nya tetap ada di
+                            // widgets/medicine_warning_card.dart.
+                            // TODO: Render kembali MedicineWarningCard ketika
+                            // quantity_remaining pasien sudah bisa diambil dan
+                            // ambang batas peringatan ditentukan backend.
                             MedicineStockCard(),
 
                             SizedBox(height: 24),

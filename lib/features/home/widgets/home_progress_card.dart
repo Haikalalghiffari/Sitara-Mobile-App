@@ -4,12 +4,14 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-// TODO: Integrate Treatment API when a per-patient treatment endpoint is
-// available. Backend saat ini hanya menyediakan GET /treatments ("Get All
-// Treatments") yang mengembalikan treatment seluruh pasien tanpa filter,
-// sehingga belum aman dipakai dari aplikasi pasien. Setelah endpoint per
-// pasien tersedia, hari ke-n, total hari, dan persentase di bawah dihitung
-// dari therapy_start_date dan therapy_end_date.
+/// Kartu ini sengaja menampilkan empty state, bukan angka contoh.
+///
+// TODO: Integrasikan Treatment API setelah backend menyediakan endpoint
+// treatment yang dapat diakses oleh role patient. Saat ini satu-satunya
+// endpoint treatment adalah GET /treatments yang memakai require_nakes,
+// sehingga akun pasien tidak boleh memanggilnya. Setelah endpoint per
+// pasien tersedia, hari ke-n, total hari, dan persentase dihitung dari
+// therapy_start_date serta therapy_end_date pada TreatmentResponse.
 class HomeProgressCard extends StatelessWidget {
   const HomeProgressCard({super.key});
 
@@ -52,7 +54,7 @@ class HomeProgressCard extends StatelessWidget {
 
               Expanded(
                 child: Text(
-                  "Day 45 of 180",
+                  "Belum ada data pengobatan",
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -78,7 +80,7 @@ class HomeProgressCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: LinearProgressIndicator(
-              value: 0.25,
+              value: 0,
               minHeight: 10,
               backgroundColor: AppColors.progressTrack,
               valueColor: const AlwaysStoppedAnimation(
@@ -90,7 +92,7 @@ class HomeProgressCard extends StatelessWidget {
           const SizedBox(height: 18),
 
           Text(
-            "Perjalananmu masih panjang, tetap semangat! Kamu telah menyelesaikan 25% dari total masa pengobatan.",
+            "Data masa pengobatan belum tersedia. Informasi ini akan muncul setelah petugas kesehatan melengkapi data pengobatanmu.",
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.textSecondary,
                   height: 1.5,

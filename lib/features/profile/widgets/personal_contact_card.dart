@@ -8,6 +8,7 @@ import 'contact_tile.dart';
 
 import '../../login/models/user_profile.dart';
 import '../models/patient_profile.dart';
+import 'profile_notice.dart';
 
 class PersonalContactCard extends StatelessWidget {
   const PersonalContactCard({
@@ -81,7 +82,10 @@ class PersonalContactCard extends StatelessWidget {
                 iconColor: AppColors.info,
                 title: "Nomor Telepon",
                 value: _orFallback(patient.phone),
-                onTap: () {},
+                onTap: () => showProfileNotice(
+                  context,
+                  profileEditUnavailableMessage,
+                ),
               ),
 
               const Divider(
@@ -95,7 +99,10 @@ class PersonalContactCard extends StatelessWidget {
                 iconColor: AppColors.secondary,
                 title: "Alamat Email",
                 value: _orFallback(user.email),
-                onTap: () {},
+                onTap: () => showProfileNotice(
+                  context,
+                  profileEditUnavailableMessage,
+                ),
               ),
 
               const Divider(
@@ -109,7 +116,10 @@ class PersonalContactCard extends StatelessWidget {
                 iconColor: AppColors.error,
                 title: "Kontak Darurat (PMO)",
                 value: _pmoContact,
-                onTap: () {},
+                onTap: () => showProfileNotice(
+                  context,
+                  profileEditUnavailableMessage,
+                ),
               ),
             ],
           ),

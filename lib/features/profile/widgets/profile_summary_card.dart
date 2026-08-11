@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 
 import '../../login/models/user_profile.dart';
 import '../models/patient_profile.dart';
+import 'profile_notice.dart';
 
 /// Menampilkan data profil yang diberikan oleh [ProfilePage].
 ///
@@ -85,7 +86,10 @@ class ProfileSummaryCard extends StatelessWidget {
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     splashRadius: 20,
-                    onPressed: () {},
+                    onPressed: () => showProfileNotice(
+                      context,
+                      profileEditUnavailableMessage,
+                    ),
                     icon: const Icon(
                       Icons.edit,
                       color: Colors.white,
@@ -130,6 +134,16 @@ class ProfileSummaryCard extends StatelessWidget {
 
           const SizedBox(height: 26),
 
+          // Kedua angka di bawah ini tidak punya sumber di backend.
+          //
+          // Masa pengobatan memerlukan `therapy_start_date` dari Treatment yang
+          // belum dapat diakses role patient. Kepatuhan tidak ada sama sekali di
+          // ERD, jadi tidak ada nilai yang bisa dihitung. Menampilkan angka di
+          // sini akan membuat pasien menyimpulkan pengobatannya berjalan baik
+          // padahal aplikasi tidak mengetahuinya.
+          //
+          // TODO: Isi dari backend setelah pasien punya cara sah membaca
+          // treatment miliknya, dan setelah metrik kepatuhan tersedia.
           IntrinsicHeight(
             child: Row(
               children: [
@@ -137,7 +151,7 @@ class ProfileSummaryCard extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-                        "Bulan 4",
+                        "—",
                         style:
                             Theme.of(context).textTheme.titleLarge?.copyWith(
                                   color: AppColors.primary,
@@ -165,7 +179,7 @@ class ProfileSummaryCard extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-                        "98%",
+                        "—",
                         style:
                             Theme.of(context).textTheme.titleLarge?.copyWith(
                                   color: AppColors.primary,

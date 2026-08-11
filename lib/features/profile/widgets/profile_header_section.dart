@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
+import 'profile_notice.dart';
+
 class ProfileHeaderSection extends StatelessWidget {
   const ProfileHeaderSection({super.key});
 
@@ -31,7 +33,10 @@ class ProfileHeaderSection extends StatelessWidget {
             ),
             child: IconButton(
               splashRadius: 22,
-              onPressed: () {},
+              onPressed: () => showProfileNotice(
+                context,
+                profileEditUnavailableMessage,
+              ),
               icon: const Icon(
                 Icons.edit_outlined,
                 color: AppColors.primary,

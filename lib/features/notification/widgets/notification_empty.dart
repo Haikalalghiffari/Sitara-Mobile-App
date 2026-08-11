@@ -5,7 +5,28 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 class NotificationEmpty extends StatelessWidget {
-  const NotificationEmpty({super.key});
+  const NotificationEmpty({
+    super.key,
+    this.title = "Belum ada notifikasi",
+    this.message =
+        "Semua aktivitas terbaru akan muncul di sini setelah tersedia.",
+    this.icon = Icons.notifications_none_rounded,
+    this.iconColor = AppColors.primary,
+    this.iconBackground = AppColors.primaryContainer,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String message;
+
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackground;
+
+  /// Tombol tambahan, dipakai kartu ini saat menampilkan kegagalan pemuatan.
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +51,12 @@ class NotificationEmpty extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.primaryContainer,
+                color: iconBackground,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.notifications_none_rounded,
-                color: AppColors.primary,
+              child: Icon(
+                icon,
+                color: iconColor,
                 size: 38,
               ),
             ),
@@ -43,7 +64,7 @@ class NotificationEmpty extends StatelessWidget {
             const SizedBox(height: 22),
 
             Text(
-              "Tidak ada notifikasi lama lainnya",
+              title,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
@@ -53,14 +74,26 @@ class NotificationEmpty extends StatelessWidget {
             const SizedBox(height: 10),
 
             Text(
-              "Semua aktivitas terbaru akan muncul di sini. "
-              "Notifikasi lama yang telah dibaca akan otomatis disembunyikan.",
+              message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.textSecondary,
                     height: 1.6,
                   ),
             ),
+
+            if (actionLabel != null) ...[
+              const SizedBox(height: 6),
+
+              TextButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(actionLabel!),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                ),
+              ),
+            ],
           ],
         ),
       ),

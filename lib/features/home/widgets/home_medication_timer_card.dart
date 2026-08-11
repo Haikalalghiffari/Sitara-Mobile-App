@@ -4,11 +4,15 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-// TODO: Integrate MedicineSchedule API when a per-patient schedule endpoint is
-// available. Backend saat ini hanya menyediakan GET /medicine-schedules ("Get
-// All Schedules") yang mengembalikan jadwal seluruh pasien, dan responsnya
-// hanya memuat treatment_id tanpa patient_id. Setelah tersedia, countdown dan
-// jam di bawah dihitung dari drink_time jadwal berikutnya.
+/// Kartu ini sengaja menampilkan empty state, bukan countdown contoh.
+///
+// TODO: Integrasikan MedicineSchedule API setelah backend menyediakan
+// endpoint jadwal yang dapat diakses oleh role patient. Saat ini hanya ada
+// GET /medicine-schedules ("Get All Schedules") yang mengembalikan jadwal
+// seluruh pasien, dan responsnya tidak memuat patient_id sehingga jadwal
+// milik pasien yang login tidak dapat dikenali tanpa menyaring data pasien
+// lain. Setelah endpoint per pasien tersedia, countdown dan jam dihitung
+// dari drink_time jadwal berikutnya.
 class HomeMedicationTimerCard extends StatelessWidget {
   const HomeMedicationTimerCard({super.key});
 
@@ -38,7 +42,7 @@ class HomeMedicationTimerCard extends StatelessWidget {
 
           Center(
             child: Text(
-              "02 : 14 : 54",
+              "-- : -- : --",
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -62,7 +66,7 @@ class HomeMedicationTimerCard extends StatelessWidget {
               SizedBox(width: 8),
 
               Text(
-                "Hari Ini • 10.30 WIB",
+                "Jadwal belum tersedia",
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 14,

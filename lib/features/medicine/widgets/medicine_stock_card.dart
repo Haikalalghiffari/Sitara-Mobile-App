@@ -4,6 +4,14 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+/// Kartu ini sengaja menampilkan empty state, bukan angka stok contoh.
+///
+// TODO: Integrasikan stok obat setelah backend menyediakan endpoint yang
+// dapat diakses role patient. Stok sebenarnya ada di MedicineScheduleResponse
+// (quantity_remaining / quantity_initial), tetapi GET /medicine-schedules
+// mengembalikan jadwal seluruh pasien tanpa patient_id, dan satu-satunya
+// penghubung ke pasien adalah treatment_id yang hanya bisa diperoleh lewat
+// GET /treatments (require_nakes).
 class MedicineStockCard extends StatelessWidget {
   const MedicineStockCard({super.key});
 
@@ -50,36 +58,15 @@ class MedicineStockCard extends StatelessWidget {
 
               const SizedBox(height: 14),
 
-              RichText(
-                text: TextSpan(
-                  children: [
-
-                    TextSpan(
-                      text: "12",
-                      style: Theme.of(context)
-                          .textTheme
-                          .displaySmall
-                          ?.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
+              Text(
+                "Stok obat belum tersedia",
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.bold,
                     ),
-
-                    TextSpan(
-                      text: " / 60",
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall,
-                    ),
-
-                    TextSpan(
-                      text: " tablet",
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium,
-                    ),
-                  ],
-                ),
               ),
 
               const SizedBox(height: 24),
@@ -87,7 +74,7 @@ class MedicineStockCard extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: LinearProgressIndicator(
-                  value: 0.20,
+                  value: 0,
                   minHeight: 12,
                   backgroundColor: AppColors.progressTrack,
                   valueColor: const AlwaysStoppedAnimation(
@@ -99,9 +86,9 @@ class MedicineStockCard extends StatelessWidget {
               const SizedBox(height: 12),
 
               Text(
-                "Sisa stok: 4 hari lagi",
+                "Data stok akan muncul setelah petugas kesehatan melengkapi data pengobatanmu.",
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.error,
+                      color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
                     ),
               ),

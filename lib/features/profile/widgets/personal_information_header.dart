@@ -5,6 +5,7 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../models/patient_profile.dart';
+import 'profile_notice.dart';
 
 class PersonalInformationHeader extends StatelessWidget {
   const PersonalInformationHeader({
@@ -48,7 +49,10 @@ class PersonalInformationHeader extends StatelessWidget {
             ),
 
             IconButton(
-              onPressed: () {},
+              onPressed: () => showProfileNotice(
+                context,
+                profileSettingsUnavailableMessage,
+              ),
               icon: const Icon(
                 Icons.settings_outlined,
                 color: AppColors.primary,
@@ -98,7 +102,10 @@ class PersonalInformationHeader extends StatelessWidget {
               ),
               child: IconButton(
                 padding: EdgeInsets.zero,
-                onPressed: () {},
+                onPressed: () => showProfileNotice(
+                  context,
+                  profileEditUnavailableMessage,
+                ),
                 icon: const Icon(
                   Icons.edit,
                   size: 18,
@@ -151,11 +158,13 @@ class PersonalInformationHeader extends StatelessWidget {
 
               const SizedBox(width: 8),
 
-              // "Fase Intensif" masih tetap karena fase pengobatan belum
-              // disediakan backend; status aktif sudah memakai data asli.
+              // Hanya status aktif yang berasal dari backend (`is_active`).
+              // Fase pengobatan sengaja tidak disebut karena TreatmentPhase
+              // hanya ada pada TreatmentResponse yang belum dapat diakses
+              // role patient.
               Text(
                 patient.isActive
-                    ? "Pasien Aktif • Fase Intensif"
+                    ? "Pasien Aktif"
                     : "Pasien Tidak Aktif",
                 style: const TextStyle(
                   color: Colors.white,
