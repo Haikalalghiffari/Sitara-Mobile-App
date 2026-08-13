@@ -8,10 +8,11 @@ import '../models/my_treatment.dart';
 
 /// Kartu timeline masa pengobatan di Progress.
 ///
-/// Minggu ke-n, total minggu, dan persentase dihitung dari
-/// `therapy_start_date` serta `therapy_end_date` pada `MyTreatmentResponse`
-/// dari `GET /treatments/my`. Bila data belum ada, tampilan empty state
-/// dipertahankan.
+/// Hari ke-n, total hari, minggu ke-n, total minggu, dan persentase dihitung
+/// dari `therapy_start_date` serta `therapy_end_date` pada
+/// `MyTreatmentResponse` dari `GET /treatments/my`. Semuanya menggambarkan
+/// jalannya waktu terapi, bukan kepatuhan minum obat. Bila data belum ada,
+/// tampilan empty state dipertahankan.
 class ProgressTimelineCard extends StatelessWidget {
   const ProgressTimelineCard({
     super.key,
@@ -119,11 +120,28 @@ class ProgressTimelineCard extends StatelessWidget {
                   ),
             )
           else ...[
-            Text(
-              "${progress.percent}% Selesai",
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+
+                Expanded(
+                  child: Text(
+                    "${progress.percent}% Selesai",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
+                ),
+
+                Text(
+                  progress.elapsedDays == 0
+                      ? "Belum dimulai"
+                      : "Hari ke-${progress.elapsedDays} dari ${progress.totalDays}",
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 22),

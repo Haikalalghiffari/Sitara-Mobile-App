@@ -40,6 +40,32 @@ class ApiEndpoints {
   /// hanya dapat diakses role nakes.
   static const String myMedicineSchedules = '/medicine-schedules/my';
 
+  /// `GET /control-schedules/my`, jadwal kontrol milik pemegang token.
+  ///
+  /// Bukan `/control-schedules`, yang mengembalikan jadwal seluruh pasien dan
+  /// hanya dapat diakses role nakes.
+  static const String myControlSchedules = '/control-schedules/my';
+
+  /// `POST /complaints`, mengirim keluhan baru. Sejak backend memakai
+  /// `require_nakes_or_patient`, endpoint ini dapat dipakai akun pasien.
+  static const String complaints = '/complaints';
+
+  /// `GET /complaints/my`, riwayat keluhan milik pemegang token.
+  ///
+  /// Bukan `/complaints`, yang mengembalikan keluhan seluruh pasien dan hanya
+  /// dapat diakses role nakes.
+  static const String myComplaints = '/complaints/my';
+
+  /// `POST /refills`, mengirim permintaan pesan ulang obat. Sejak backend
+  /// mengizinkan role patient, endpoint ini dapat dipakai akun pasien.
+  static const String refills = '/refills';
+
+  /// `GET /refills/my`, riwayat pesan ulang milik pemegang token.
+  ///
+  /// Bukan `/refills`, yang mengembalikan permintaan seluruh pasien dan hanya
+  /// dapat diakses role nakes.
+  static const String myRefills = '/refills/my';
+
   static const String notifications = '/notifications';
 
   /// `PUT /notifications/read-all`, menandai seluruh notifikasi milik pemegang

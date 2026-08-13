@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 
+/// Tombol kirim permintaan pesan ulang.
+///
+/// [isSubmitting] menonaktifkan tombol selama `POST /refills` berlangsung agar
+/// permintaan yang sama tidak terkirim berkali-kali.
 class RefillSubmitButton extends StatelessWidget {
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isSubmitting;
 
   const RefillSubmitButton({
     super.key,
-    required this.onPressed,
+    this.onPressed,
+    this.isSubmitting = false,
   });
 
   @override
@@ -25,14 +31,23 @@ class RefillSubmitButton extends StatelessWidget {
             borderRadius: AppRadius.button,
           ),
         ),
-        onPressed: onPressed,
-        icon: const Icon(
-          Icons.send_rounded,
-          size: 22,
-        ),
-        label: const Text(
-          "Kirim Permintaan",
-          style: TextStyle(
+        onPressed: isSubmitting ? null : onPressed,
+        icon: isSubmitting
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(
+                Icons.send_rounded,
+                size: 22,
+              ),
+        label: Text(
+          isSubmitting ? "Mengirim..." : "Kirim Permintaan",
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),

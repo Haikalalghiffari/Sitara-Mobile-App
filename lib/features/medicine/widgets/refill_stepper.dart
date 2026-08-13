@@ -3,7 +3,16 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 
 class RefillStepper extends StatelessWidget {
-  const RefillStepper({super.key});
+  /// Langkah yang sudah dicapai, 1 sampai 3.
+  ///
+  /// Nilai bawaannya 1 sehingga tampilan sama seperti sebelumnya. Halaman
+  /// menaikkannya menjadi 3 hanya setelah `POST /refills` benar-benar berhasil.
+  final int currentStep;
+
+  const RefillStepper({
+    super.key,
+    this.currentStep = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -14,7 +23,7 @@ class RefillStepper extends StatelessWidget {
             _buildStep(
               number: "1",
               label: "Informasi",
-              active: true,
+              active: currentStep >= 1,
             ),
 
             Expanded(
@@ -27,6 +36,7 @@ class RefillStepper extends StatelessWidget {
             _buildStep(
               number: "2",
               label: "Review",
+              active: currentStep >= 2,
             ),
 
             Expanded(
@@ -39,6 +49,7 @@ class RefillStepper extends StatelessWidget {
             _buildStep(
               number: "3",
               label: "Selesai",
+              active: currentStep >= 3,
             ),
           ],
         ),

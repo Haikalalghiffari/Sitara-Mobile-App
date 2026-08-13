@@ -1,19 +1,27 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 import '../../../shared/widgets/sitara_top_bar.dart';
 
+import '../models/complaint.dart';
+import '../services/complaint_service.dart';
 import '../widgets/report_notice_card.dart';
 import '../widgets/report_title_section.dart';
 import '../widgets/report_symptom_card.dart';
 import '../widgets/report_notes_field.dart';
 import '../widgets/report_submit_button.dart';
+import '../widgets/report_history_section.dart';
 
 import '../../home/pages/home_page.dart';
+import '../../login/pages/login_page.dart';
+import '../../login/services/auth_service.dart';
+import '../../progress/models/my_treatment.dart';
 import '../../progress/pages/progress_page.dart';
+import '../../progress/services/treatment_service.dart';
 import '../../medicine/pages/medicine_page.dart';
 import '../../profile/pages/profile_page.dart';
 
@@ -47,10 +55,128 @@ class _ReportPageState extends State<ReportPage> {
 
   final Set<int> selectedSymptoms = {};
 
+  final AuthService _authService = AuthService();
+  final ComplaintService _complaintService = ComplaintService();
+  final TreatmentService _treatmentService = TreatmentService();
+
+  List<Complaint> _complaints = <Complaint>[];
+  bool _isLoadingComplaints = true;
+  String? _complaintError;
+
+  List<MyTreatment> _treatments = <MyTreatment>[];
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
+    // berulang setiap kali widget di-rebuild.
+    _loadComplaints();
+    _loadTreatments();
+  }
+
   @override
   void dispose() {
     notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadComplaints() async {
+    setState(() {
+      _isLoadingComplaints = true;
+      _complaintError = null;
+    });
+
+    try {
+      final List<Complaint> complaints =
+          await _complaintService.getMyComplaints();
+
+      if (!mounted) return;
+
+      setState(() {
+        _complaints = complaints;
+        _complaintError = null;
+        _isLoadingComplaints = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _complaints = <Complaint>[];
+        _complaintError = error.message;
+        _isLoadingComplaints = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _complaints = <Complaint>[];
+        _complaintError = ApiException.unexpectedMessage;
+        _isLoadingComplaints = false;
+      });
+    }
+  }
+
+  /// Dipakai hanya untuk memperoleh `treatment_id` milik pasien saat mengirim
+  /// keluhan. Tidak ada bagian UI yang menampilkan data pengobatan di sini.
+  Future<void> _loadTreatments() async {
+    try {
+      final List<MyTreatment> treatments =
+          await _treatmentService.getMyTreatments();
+
+      if (!mounted) return;
+
+      setState(() {
+        _treatments = treatments;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _treatments = <MyTreatment>[];
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _treatments = <MyTreatment>[];
+      });
+    }
+  }
+
+  /// Pengobatan aktif milik pasien, sumber sah `treatment_id`.
+  ///
+  /// Hanya yang berstatus `active` yang dipakai; bila pasien punya lebih dari
+  /// satu, yang tanggal mulainya paling akhir yang dipilih.
+  MyTreatment? get _activeTreatment {
+    final List<MyTreatment> active = _treatments
+        .where((MyTreatment item) => item.isActive)
+        .toList();
+
+    return MyTreatment.selectCurrent(active);
+  }
+
+  Future<void> _handleExpiredSession() async {
+    await _authService.logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
+      ),
+      (route) => false,
+    );
   }
 
   /// Keluhan "Lainnya" tidak menjelaskan apa pun tanpa catatan,
@@ -61,7 +187,9 @@ class _ReportPageState extends State<ReportPage> {
   /// menempel pada gejala yang benar bila urutan daftar berubah.
   int get _dangerSymptomIndex => symptoms.indexOf("Batuk Berdarah");
 
-  void _submitReport() {
+  Future<void> _submitReport() async {
+    if (_isSubmitting) return;
+
     final String notes = notesController.text.trim();
     final bool hasSymptom = selectedSymptoms.isNotEmpty;
 
@@ -89,25 +217,86 @@ class _ReportPageState extends State<ReportPage> {
       return;
     }
 
-    // Form sudah lengkap, tetapi laporan TIDAK dikirim ke mana pun.
-    //
-    // POST /complaints memakai require_nakes, dan ComplaintCreate mewajibkan
-    // treatment_id yang tidak dapat diperoleh pasien secara sah. Karena itu
-    // isi form sengaja TIDAK direset: pasien masih perlu membacakan keluhannya
-    // kepada petugas kesehatan.
-    //
-    // TODO: Kirim POST /complaints beserta reset form setelah backend
-    // menyediakan endpoint keluhan yang dapat diakses role patient dan cara
-    // sah memperoleh treatment_id miliknya. Saat itu isLoading pada
-    // ReportSubmitButton baru dipakai selama request berlangsung.
-    _showMessage(
-      "Laporan belum dapat dikirim melalui aplikasi. Sampaikan keluhan ini kepada petugas kesehatan.",
-    );
+    // `treatment_id` wajib pada ComplaintCreate dan backend menolak dengan 403
+    // bila bukan milik pasien yang login, jadi keluhan tidak dikirim sama
+    // sekali selama pengobatan aktif belum diketahui.
+    final MyTreatment? treatment = _activeTreatment;
+
+    if (treatment == null) {
+      _showMessage(
+        "Keluhan belum dapat dikirim karena data pengobatan Anda belum tersedia. Hubungi petugas kesehatan.",
+        backgroundColor: AppColors.error,
+      );
+      return;
+    }
+
+    // Kategori disusun dari gejala yang benar-benar dipilih pasien. Backend
+    // menyimpan category sebagai teks bebas, bukan enum.
+    final List<int> selected = selectedSymptoms.toList()..sort();
+    final String category =
+        selected.map((int index) => symptoms[index]).join(", ");
+
+    final String description =
+        notes.isNotEmpty ? notes : "Gejala yang dilaporkan: $category.";
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await _complaintService.createComplaint(
+        treatmentId: treatment.id,
+        category: category,
+        description: description,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      _resetForm();
+
+      _showMessage(
+        "Keluhan berhasil dikirim ke petugas kesehatan.",
+        backgroundColor: AppColors.success,
+      );
+
+      // Riwayat dimuat ulang dari backend, bukan ditambah secara lokal, agar
+      // yang tampil benar-benar data yang tersimpan di server.
+      await _loadComplaints();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      _showMessage(
+        error.message,
+        backgroundColor: AppColors.error,
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      _showMessage(
+        ApiException.unexpectedMessage,
+        backgroundColor: AppColors.error,
+      );
+    }
   }
 
-  /// Dipertahankan untuk dipakai setelah POST /complaints tersedia bagi
-  /// pasien, supaya form dibersihkan hanya ketika laporan benar-benar terkirim.
-  // ignore: unused_element
+  /// Dibersihkan hanya setelah backend membalas dengan sukses.
   void _resetForm() {
     notesController.clear();
 
@@ -257,6 +446,16 @@ class _ReportPageState extends State<ReportPage> {
 
                             ReportSubmitButton(
                               onPressed: _submitReport,
+                              isLoading: _isSubmitting,
+                            ),
+
+                            const SizedBox(height: 32),
+
+                            ReportHistorySection(
+                              complaints: _complaints,
+                              isLoading: _isLoadingComplaints,
+                              errorMessage: _complaintError,
+                              onRetry: _loadComplaints,
                             ),
 
                             const SizedBox(height: 24),

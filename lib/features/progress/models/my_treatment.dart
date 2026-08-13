@@ -1,3 +1,5 @@
+import '../../../core/utils/indonesian_date.dart';
+
 /// Response `MyTreatmentResponse` dari `GET /treatments/my`.
 ///
 /// Field mengikuti persis schema backend, tanpa tambahan.
@@ -51,6 +53,39 @@ class MyTreatment {
   }
 
   bool get isActive => status.toLowerCase() == 'active';
+
+  /// Label fase terapi berbahasa Indonesia.
+  ///
+  /// Hanya dua nilai milik `TreatmentPhase` yang dikenali. Nilai di luar itu
+  /// menghasilkan null agar UI tidak menampilkan fase karangan.
+  String? get phaseLabel {
+    switch (phase.toLowerCase()) {
+      case 'intensive':
+        return 'Intensif';
+      case 'continuation':
+        return 'Lanjutan';
+      default:
+        return null;
+    }
+  }
+
+  /// Label status terapi berbahasa Indonesia, mengikuti `TreatmentStatus`.
+  String? get statusLabel {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return 'Aktif';
+      case 'completed':
+        return 'Selesai';
+      case 'dropped':
+        return 'Dihentikan';
+      default:
+        return null;
+    }
+  }
+
+  String? get startDateLabel => formatIndonesianDate(therapyStart);
+
+  String? get endDateLabel => formatIndonesianDate(therapyEnd);
 
   DateTime? get therapyStart {
     return _parseDate(therapyStartDate);

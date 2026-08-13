@@ -4,11 +4,37 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../models/my_medicine_schedule.dart';
+import '../models/refill.dart';
+
+/// Obat yang akan dipesan ulang, beserta status permintaan terakhir.
+///
+/// Data obat berasal dari `GET /medicine-schedules/my` (`medicine_id`,
+/// `dosage`, `quantity_initial`, `quantity_remaining`). Nama obat tidak
+/// ditampilkan karena response tidak memuatnya; satu-satunya sumber nama adalah
+/// `MedicineResponse` pada `/medicines` yang memakai `require_nakes`.
+///
+/// Status berasal dari `RefillResponse.status` (`GET /refills/my`), bukan dari
+/// status buatan aplikasi.
 class RefillMedicineInfoCard extends StatelessWidget {
-  const RefillMedicineInfoCard({super.key});
+  const RefillMedicineInfoCard({
+    super.key,
+    this.schedule,
+    this.latestRefill,
+    this.errorMessage,
+  });
+
+  final MyMedicineSchedule? schedule;
+
+  /// Permintaan pesan ulang terbaru milik pasien, null bila belum ada.
+  final Refill? latestRefill;
+
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
+    final MyMedicineSchedule? item = schedule;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -33,7 +59,9 @@ class RefillMedicineInfoCard extends StatelessWidget {
                   children: [
 
                     Text(
-                      "Data obat belum tersedia",
+                      item == null
+                          ? "Data obat belum tersedia"
+                          : "Obat #${item.medicineId}",
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge
@@ -45,7 +73,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
                     const SizedBox(height: 6),
 
                     Text(
-                      "Informasi dosis belum tersedia.",
+                      _dosageText(item),
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
@@ -57,31 +85,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
                 ),
               ),
 
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                // Status ini menggambarkan kondisi sebenarnya: permintaan
-                // belum dikirim ke mana pun. Warna netral dipakai agar tidak
-                // terbaca sebagai status darurat yang berasal dari backend.
-                // TODO: Tampilkan RefillResponse.status yang sebenarnya
-                // (RefillRequestStatus) setelah POST /refills dapat diakses
-                // role patient.
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: const Text(
-                  "Status:\nBelum dikirim",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+              _statusChip(context),
             ],
           ),
 
@@ -125,12 +129,16 @@ class RefillMedicineInfoCard extends StatelessWidget {
                     const SizedBox(height: 6),
 
                     Text(
-                      "Belum tersedia",
+                      item == null
+                          ? "Belum tersedia"
+                          : "${item.quantityRemaining} dari ${item.quantityInitial}",
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
                           ?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: item == null
+                                ? AppColors.textSecondary
+                                : AppColors.textPrimary,
                             fontWeight: FontWeight.bold,
                           ),
                     ),
@@ -139,7 +147,77 @@ class RefillMedicineInfoCard extends StatelessWidget {
               ),
             ],
           ),
+
+          if (item == null) ...[
+            const SizedBox(height: 16),
+
+            Text(
+              errorMessage ??
+                  "Informasi obat akan muncul setelah petugas kesehatan melengkapi jadwal obat Anda.",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  String _dosageText(MyMedicineSchedule? item) {
+    if (item == null) return "Informasi dosis belum tersedia.";
+
+    final String dosage = item.dosage.trim();
+    if (dosage.isEmpty) return "Informasi dosis belum tersedia.";
+    return dosage;
+  }
+
+  /// Chip status memakai label dari backend. Bila pasien belum pernah mengirim
+  /// permintaan, atau nilai `status` di luar `RefillRequestStatus`, warna netral
+  /// dipakai agar tidak terbaca sebagai status yang datang dari server.
+  Widget _statusChip(BuildContext context) {
+    final Refill? refill = latestRefill;
+    final String? label = refill?.statusLabel;
+
+    final Color background;
+    final Color foreground;
+
+    switch (refill?.status.toLowerCase()) {
+      case 'pending':
+        background = AppColors.warningContainer;
+        foreground = AppColors.onWarningContainer;
+        break;
+      case 'approved':
+        background = AppColors.successContainer;
+        foreground = AppColors.onSuccessContainer;
+        break;
+      case 'rejected':
+        background = AppColors.errorContainer;
+        foreground = AppColors.onErrorContainer;
+        break;
+      default:
+        background = AppColors.surfaceContainerHigh;
+        foreground = AppColors.textSecondary;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Text(
+        "Status:\n${label ?? "Belum ada permintaan"}",
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: foreground,
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
       ),
     );
   }

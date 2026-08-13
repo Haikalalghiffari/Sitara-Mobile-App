@@ -7,11 +7,13 @@ import '../../../core/theme/spacing.dart';
 import '../../../shared/widgets/sitara_app_bar.dart';
 import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 
+import '../models/control_schedule.dart';
 import '../models/my_medicine_schedule.dart';
+import '../services/control_schedule_service.dart';
 import '../services/medicine_schedule_service.dart';
 import '../widgets/medicine_header_section.dart';
 import '../widgets/medicine_stock_card.dart';
-import '../widgets/medicine_schedule_card.dart';
+import '../widgets/control_schedule_card.dart';
 import '../widgets/medicine_list_card.dart';
 import '../widgets/medicine_order_button.dart';
 import '../widgets/medicine_note_card.dart';
@@ -32,9 +34,14 @@ class MedicinePage extends StatefulWidget {
 class _MedicinePageState extends State<MedicinePage> {
   final AuthService _authService = AuthService();
   final MedicineScheduleService _scheduleService = MedicineScheduleService();
+  final ControlScheduleService _controlScheduleService =
+      ControlScheduleService();
 
   List<MyMedicineSchedule> _schedules = <MyMedicineSchedule>[];
   String? _scheduleError;
+
+  List<ControlSchedule> _controlSchedules = <ControlSchedule>[];
+  String? _controlScheduleError;
 
   @override
   void initState() {
@@ -42,6 +49,7 @@ class _MedicinePageState extends State<MedicinePage> {
     // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
     // berulang setiap kali widget di-rebuild.
     _loadSchedules();
+    _loadControlSchedules();
   }
 
   Future<void> _loadSchedules() async {
@@ -81,6 +89,39 @@ class _MedicinePageState extends State<MedicinePage> {
     }
   }
 
+  Future<void> _loadControlSchedules() async {
+    try {
+      final List<ControlSchedule> schedules =
+          await _controlScheduleService.getMySchedules();
+
+      if (!mounted) return;
+
+      setState(() {
+        _controlSchedules = schedules;
+        _controlScheduleError = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _controlSchedules = <ControlSchedule>[];
+        _controlScheduleError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _controlSchedules = <ControlSchedule>[];
+        _controlScheduleError = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
   /// Kartu stok hanya punya satu angka, sedangkan pasien bisa memiliki lebih
   /// dari satu obat. Yang ditampilkan adalah obat dengan sisa proporsional
   /// paling sedikit, bukan penjumlahan antar obat yang satuannya tak diketahui.
@@ -88,8 +129,8 @@ class _MedicinePageState extends State<MedicinePage> {
     return MyMedicineSchedule.selectLowestStock(_schedules);
   }
 
-  MyMedicineSchedule? get _nextDrinkSchedule {
-    return MyMedicineSchedule.selectNextDrink(_schedules);
+  ControlSchedule? get _upcomingControlSchedule {
+    return ControlSchedule.selectUpcoming(_controlSchedules);
   }
 
   Future<void> _handleExpiredSession() async {
@@ -156,9 +197,9 @@ class _MedicinePageState extends State<MedicinePage> {
 
                             const SizedBox(height: 24),
 
-                            MedicineScheduleCard(
-                              schedule: _nextDrinkSchedule,
-                              errorMessage: _scheduleError,
+                            ControlScheduleCard(
+                              schedule: _upcomingControlSchedule,
+                              errorMessage: _controlScheduleError,
                             ),
 
                             const SizedBox(height: 24),

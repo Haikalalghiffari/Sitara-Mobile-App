@@ -63,12 +63,8 @@ class ReportNoticeCard extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // TODO: Kembalikan penjelasan alur peninjauan oleh tenaga
-                // kesehatan setelah POST /complaints dapat diakses role
-                // patient. Sebelum itu, kartu ini tidak boleh menjanjikan
-                // laporan terkirim ke Puskesmas.
                 Text(
-                  "Pengiriman laporan melalui aplikasi belum tersedia untuk akun pasien. Sampaikan keluhan Anda langsung kepada tenaga kesehatan di Puskesmas.",
+                  "Keluhan yang Anda kirim akan diterima petugas kesehatan dan ditinjau. Untuk keadaan darurat, segera hubungi Puskesmas secara langsung.",
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: AppColors.textSecondary,
                         height: 1.6,

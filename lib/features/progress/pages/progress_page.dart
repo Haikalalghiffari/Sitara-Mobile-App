@@ -144,7 +144,10 @@ class _ProgressPageState extends State<ProgressPage> {
 
                             const SizedBox(height: 24),
 
-                            const ProgressActivityChart(),
+                            ProgressActivityChart(
+                              treatment: _currentTreatment,
+                              errorMessage: _treatmentError,
+                            ),
 
                             const SizedBox(height: 24),
                           ],

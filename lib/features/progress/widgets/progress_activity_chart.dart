@@ -4,19 +4,31 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Grafik ini sengaja menampilkan empty state, bukan batang dengan nilai
-/// contoh.
+import '../models/my_treatment.dart';
+
+/// Ringkasan perjalanan waktu terapi dari `GET /treatments/my`.
 ///
-// TODO: Integrasikan riwayat mingguan setelah backend menyediakan endpoint
-// verifikasi minum obat yang dapat diakses role patient. Riwayat harian
-// berasal dari verification_date dan status pada VideoVerificationResponse,
-// yang hanya terhubung ke pasien melalui medicine_schedule_id lalu
-// treatment_id, sehingga belum dapat diambil oleh akun pasien.
+/// Sengaja bukan grafik batang harian: backend tidak menyediakan riwayat minum
+/// obat yang dapat diakses pasien, sehingga batang apa pun di sini akan
+/// terbaca sebagai aktivitas minum obat yang tidak pernah tercatat.
+///
+/// Yang ditampilkan hanya tanggal mulai, lamanya terapi berjalan, perkiraan
+/// selesai, fase, dan status. Tidak ada nilai kepatuhan.
 class ProgressActivityChart extends StatelessWidget {
-  const ProgressActivityChart({super.key});
+  const ProgressActivityChart({
+    super.key,
+    this.treatment,
+    this.errorMessage,
+  });
+
+  final MyTreatment? treatment;
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
+    final MyTreatment? item = treatment;
+    final String? statusLabel = item?.statusLabel;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -43,7 +55,7 @@ class ProgressActivityChart extends StatelessWidget {
 
               Expanded(
                 child: Text(
-                  "Aktivitas Mingguan",
+                  "Perjalanan Pengobatan",
                   style: Theme.of(context)
                       .textTheme
                       .headlineSmall
@@ -53,42 +65,134 @@ class ProgressActivityChart extends StatelessWidget {
                 ),
               ),
 
-              Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
+              // Penanda di kanan atas menampilkan status terapi dari backend,
+              // menggantikan legenda "Tercatat" yang dahulu milik grafik
+              // batang dan bisa disalahpahami sebagai catatan minum obat.
+              if (statusLabel != null) ...[
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
 
-              const SizedBox(width: 6),
+                const SizedBox(width: 6),
 
-              Text(
-                "Tercatat",
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+                Text(
+                  statusLabel,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             ],
           ),
 
           const SizedBox(height: 36),
 
-          // Tinggi 220 dipertahankan agar ukuran kartu tidak berubah saat
-          // grafik belum memiliki data.
+          // Tinggi 220 dipertahankan agar ukuran kartu tidak berubah.
           SizedBox(
             height: 220,
-            child: Center(
-              child: Text(
-                "Riwayat progress belum tersedia",
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.textSecondary,
+            child: item == null
+                ? Center(
+                    child: Text(
+                      errorMessage ??
+                          "Perjalanan pengobatan akan muncul setelah data pengobatan tersedia.",
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
                     ),
-              ),
-            ),
+                  )
+                : _journey(context, item),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _journey(BuildContext context, MyTreatment item) {
+    final TreatmentProgress? progress = item.progress;
+
+    final String elapsedValue;
+    if (progress == null) {
+      elapsedValue = "Belum tersedia";
+    } else if (progress.elapsedDays == 0) {
+      elapsedValue = "Belum dimulai";
+    } else {
+      elapsedValue =
+          "${progress.elapsedDays} dari ${progress.totalDays} hari (${progress.percent}%)";
+    }
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+
+        _journeyRow(
+          context,
+          icon: Icons.play_circle_outline,
+          label: "Mulai Terapi",
+          value: item.startDateLabel ?? "Belum tersedia",
+        ),
+
+        _journeyRow(
+          context,
+          icon: Icons.timelapse,
+          label: "Sudah Berjalan",
+          value: elapsedValue,
+        ),
+
+        _journeyRow(
+          context,
+          icon: Icons.event_available_outlined,
+          label: "Perkiraan Selesai",
+          value: item.endDateLabel ?? "Belum tersedia",
+        ),
+
+        _journeyRow(
+          context,
+          icon: Icons.category_outlined,
+          label: "Fase Terapi",
+          value: item.phaseLabel ?? "Belum tersedia",
+        ),
+      ],
+    );
+  }
+
+  Widget _journeyRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+
+        Icon(
+          icon,
+          color: AppColors.primary,
+          size: 26,
+        ),
+
+        const SizedBox(width: 14),
+
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+          ),
+        ),
+
+        Text(
+          value,
+          textAlign: TextAlign.right,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ],
     );
   }
 }

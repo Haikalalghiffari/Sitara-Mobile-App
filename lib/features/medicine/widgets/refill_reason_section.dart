@@ -4,17 +4,31 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-class RefillReasonSection extends StatefulWidget {
-  const RefillReasonSection({super.key});
+/// Pilihan alasan pesan ulang obat.
+///
+/// Alasan yang dipilih dipegang oleh halaman, bukan oleh widget ini, supaya
+/// nilainya dapat dikirim sebagai `reason` pada `POST /refills`. Backend
+/// menyimpan `reason` sebagai teks bebas, jadi label di bawah dikirim apa
+/// adanya.
+///
+/// Tidak ada pilihan yang aktif di awal: mengirim alasan yang tidak pernah
+/// dipilih pasien sama dengan mengarang isi permintaan.
+class RefillReasonSection extends StatelessWidget {
+  const RefillReasonSection({
+    super.key,
+    this.selectedReason,
+    required this.onChanged,
+  });
 
-  @override
-  State<RefillReasonSection> createState() =>
-      _RefillReasonSectionState();
-}
+  final String? selectedReason;
+  final ValueChanged<String> onChanged;
 
-class _RefillReasonSectionState
-    extends State<RefillReasonSection> {
-  String selectedReason = "Obat Hilang";
+  static const List<String> reasons = <String>[
+    "Obat Hilang",
+    "Obat Rusak / Basah",
+    "Lupa Membawa Saat Bepergian",
+    "Lainnya",
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -30,53 +44,16 @@ class _RefillReasonSectionState
 
         const SizedBox(height: 20),
 
-        _ReasonTile(
-          title: "Obat Hilang",
-          selected: selectedReason == "Obat Hilang",
-          onTap: () {
-            setState(() {
-              selectedReason = "Obat Hilang";
-            });
-          },
-        ),
-
-        const SizedBox(height: 12),
-
-        _ReasonTile(
-          title: "Obat Rusak / Basah",
-          selected: selectedReason == "Obat Rusak / Basah",
-          onTap: () {
-            setState(() {
-              selectedReason = "Obat Rusak / Basah";
-            });
-          },
-        ),
-
-        const SizedBox(height: 12),
-
-        _ReasonTile(
-          title: "Lupa Membawa Saat Bepergian",
-          selected:
-              selectedReason == "Lupa Membawa Saat Bepergian",
-          onTap: () {
-            setState(() {
-              selectedReason =
-                  "Lupa Membawa Saat Bepergian";
-            });
-          },
-        ),
-
-        const SizedBox(height: 12),
-
-        _ReasonTile(
-          title: "Lainnya",
-          selected: selectedReason == "Lainnya",
-          onTap: () {
-            setState(() {
-              selectedReason = "Lainnya";
-            });
-          },
-        ),
+        for (int index = 0; index < reasons.length; index++) ...[
+          if (index > 0) const SizedBox(height: 12),
+          _ReasonTile(
+            title: reasons[index],
+            selected: selectedReason == reasons[index],
+            onTap: () {
+              onChanged(reasons[index]);
+            },
+          ),
+        ],
       ],
     );
   }
