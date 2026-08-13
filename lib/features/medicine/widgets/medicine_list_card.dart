@@ -4,16 +4,23 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Kartu ini sengaja menampilkan empty state, bukan nama obat contoh.
+import '../models/my_medicine_schedule.dart';
+
+/// Daftar obat aktif milik pasien dari `GET /medicine-schedules/my`.
 ///
-// TODO: Integrasikan daftar obat setelah backend menyediakan endpoint yang
-// dapat diakses role patient. Nama dan kekuatan obat ada di MedicineResponse
-// (name, strength, unit), sedangkan dosis pasien ada di
-// MedicineScheduleResponse.dosage. Keduanya hanya terhubung ke pasien melalui
-// treatment_id, dan GET /medicines sendiri adalah katalog seluruh obat
-// sehingga tidak boleh ditampilkan sebagai obat milik pasien.
+/// Dosis dan jam minum berasal dari `dosage` serta `drink_time`. Nama obat
+/// tidak ditampilkan karena response hanya memuat `medicine_id`; nama ada di
+/// `MedicineResponse`, tetapi seluruh endpoint `/medicines` memakai
+/// `require_nakes` sehingga akun pasien selalu ditolak 403.
 class MedicineListCard extends StatelessWidget {
-  const MedicineListCard({super.key});
+  const MedicineListCard({
+    super.key,
+    this.schedules = const <MyMedicineSchedule>[],
+    this.errorMessage,
+  });
+
+  final List<MyMedicineSchedule> schedules;
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -44,42 +51,67 @@ class MedicineListCard extends StatelessWidget {
 
           const Divider(height: 1),
 
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          if (schedules.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
-                Text(
-                  "Data obat belum tersedia",
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
+                  Text(
+                    "Data obat belum tersedia",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
 
-                const SizedBox(height: 6),
+                  const SizedBox(height: 6),
 
-                Text(
-                  "Informasi obat akan muncul setelah data pengobatan tersedia.",
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.5,
-                      ),
-                ),
-              ],
+                  Text(
+                    errorMessage ??
+                        "Informasi obat akan muncul setelah data pengobatan tersedia.",
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                          height: 1.5,
+                        ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            for (int index = 0; index < schedules.length; index++) ...[
+              if (index > 0) const Divider(height: 1),
+              _medicineTile(
+                name: "Obat #${schedules[index].medicineId}",
+                dosage: schedules[index].dosage.trim().isEmpty
+                    ? "Dosis belum tersedia"
+                    : schedules[index].dosage,
+                badge: schedules[index].drinkTimeLabel ?? "Jam belum tersedia",
+              ),
+            ],
+
+            const Divider(height: 1),
+
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.cardPadding),
+              child: Text(
+                "Nama obat belum dapat ditampilkan di aplikasi pasien. Cocokkan dengan kemasan obat Anda atau tanyakan kepada petugas kesehatan.",
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.5,
+                    ),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  /// Dipertahankan untuk dipakai kembali begitu daftar obat pasien dapat
-  /// diambil dari backend, sehingga desain baris obat tidak perlu dibuat ulang.
-  // ignore: unused_element
   Widget _medicineTile({
     required String name,
     required String dosage,
+    required String badge,
   }) {
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -133,9 +165,11 @@ class MedicineListCard extends StatelessWidget {
               color: AppColors.primaryContainer,
               borderRadius: BorderRadius.circular(30),
             ),
-            child: const Text(
-              "HARIAN",
-              style: TextStyle(
+            // Menampilkan jam minum dari drink_time, bukan label frekuensi:
+            // backend tidak mengirim berapa kali obat diminum per hari.
+            child: Text(
+              badge,
+              style: const TextStyle(
                 color: Colors.black54,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,

@@ -4,18 +4,33 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Kartu ini sengaja menampilkan empty state, bukan minggu dan persentase
-/// contoh.
+import '../models/my_treatment.dart';
+
+/// Kartu timeline masa pengobatan di Progress.
 ///
-// TODO: Integrasikan timeline setelah backend menyediakan endpoint treatment
-// yang dapat diakses role patient. Minggu ke-n, total minggu, dan persentase
-// dihitung dari therapy_start_date serta therapy_end_date pada
-// TreatmentResponse, sedangkan GET /treatments memakai require_nakes.
+/// Minggu ke-n, total minggu, dan persentase dihitung dari
+/// `therapy_start_date` serta `therapy_end_date` pada `MyTreatmentResponse`
+/// dari `GET /treatments/my`. Bila data belum ada, tampilan empty state
+/// dipertahankan.
 class ProgressTimelineCard extends StatelessWidget {
-  const ProgressTimelineCard({super.key});
+  const ProgressTimelineCard({
+    super.key,
+    this.treatment,
+    this.errorMessage,
+  });
+
+  final MyTreatment? treatment;
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
+    final TreatmentProgress? progress = treatment?.progress;
+    final DateTime? start = treatment?.therapyStart;
+    final DateTime? end = treatment?.therapyEnd;
+    final int? monthSpan = (start != null && end != null)
+        ? (end.year - start.year) * 12 + (end.month - start.month) + 1
+        : null;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -47,19 +62,43 @@ class ProgressTimelineCard extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          Text(
-            "Belum tersedia",
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
+          if (progress == null)
+            Text(
+              "Belum tersedia",
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            )
+          else
+            RichText(
+              text: TextSpan(
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                children: [
+                  const TextSpan(
+                    text: "Minggu ke-",
+                  ),
+                  TextSpan(
+                    text: "${progress.elapsedWeeks}",
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextSpan(
+                    text: " dari ${progress.totalWeeks}",
+                  ),
+                ],
+              ),
+            ),
 
           const SizedBox(height: 22),
 
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: LinearProgressIndicator(
-              value: 0,
+              value: progress?.fraction ?? 0,
               minHeight: 12,
               backgroundColor: AppColors.progressTrack,
               valueColor: const AlwaysStoppedAnimation(
@@ -70,16 +109,62 @@ class ProgressTimelineCard extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Label "Bulan 1 / Sekarang / Bulan 6" dihapus karena mengandaikan
-          // masa pengobatan 6 bulan, padahal durasi sebenarnya hanya diketahui
-          // dari therapy_start_date dan therapy_end_date milik pasien.
-          Text(
-            "Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.",
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.5,
+          if (progress == null)
+            Text(
+              errorMessage ??
+                  "Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.",
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+            )
+          else ...[
+            Text(
+              "${progress.percent}% Selesai",
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+
+            const SizedBox(height: 22),
+
+            Row(
+              children: [
+
+                Expanded(
+                  child: Text(
+                    "Bulan 1",
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                 ),
-          ),
+
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      "Sekarang",
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ),
+                ),
+
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      "Bulan ${monthSpan ?? 1}",
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

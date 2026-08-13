@@ -1,11 +1,14 @@
   import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../../../shared/widgets/sitara_app_bar.dart';
 import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 
+import '../models/my_medicine_schedule.dart';
+import '../services/medicine_schedule_service.dart';
 import '../widgets/medicine_header_section.dart';
 import '../widgets/medicine_stock_card.dart';
 import '../widgets/medicine_schedule_card.dart';
@@ -14,11 +17,93 @@ import '../widgets/medicine_order_button.dart';
 import '../widgets/medicine_note_card.dart';
 
 import '../../home/pages/home_page.dart';
+import '../../login/pages/login_page.dart';
+import '../../login/services/auth_service.dart';
 import '../../progress/pages/progress_page.dart';
 import '../../profile/pages/profile_page.dart';
 
-class MedicinePage extends StatelessWidget {
+class MedicinePage extends StatefulWidget {
   const MedicinePage({super.key});
+
+  @override
+  State<MedicinePage> createState() => _MedicinePageState();
+}
+
+class _MedicinePageState extends State<MedicinePage> {
+  final AuthService _authService = AuthService();
+  final MedicineScheduleService _scheduleService = MedicineScheduleService();
+
+  List<MyMedicineSchedule> _schedules = <MyMedicineSchedule>[];
+  String? _scheduleError;
+
+  @override
+  void initState() {
+    super.initState();
+    // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
+    // berulang setiap kali widget di-rebuild.
+    _loadSchedules();
+  }
+
+  Future<void> _loadSchedules() async {
+    setState(() {
+      _scheduleError = null;
+    });
+
+    try {
+      final List<MyMedicineSchedule> schedules =
+          await _scheduleService.getMySchedules();
+
+      if (!mounted) return;
+
+      setState(() {
+        _schedules = schedules;
+        _scheduleError = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _schedules = <MyMedicineSchedule>[];
+        _scheduleError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _schedules = <MyMedicineSchedule>[];
+        _scheduleError = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
+  /// Kartu stok hanya punya satu angka, sedangkan pasien bisa memiliki lebih
+  /// dari satu obat. Yang ditampilkan adalah obat dengan sisa proporsional
+  /// paling sedikit, bukan penjumlahan antar obat yang satuannya tak diketahui.
+  MyMedicineSchedule? get _lowestStockSchedule {
+    return MyMedicineSchedule.selectLowestStock(_schedules);
+  }
+
+  MyMedicineSchedule? get _nextDrinkSchedule {
+    return MyMedicineSchedule.selectNextDrink(_schedules);
+  }
+
+  Future<void> _handleExpiredSession() async {
+    await _authService.logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
+      ),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,45 +129,54 @@ class MedicinePage extends StatelessWidget {
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
 
-                            SitaraAppBar(),
+                            const SitaraAppBar(),
 
-                            SizedBox(height: 28),
+                            const SizedBox(height: 28),
 
-                            MedicineHeaderSection(),
+                            const MedicineHeaderSection(),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
                             // MedicineWarningCard sengaja belum dirender.
-                            // Peringatan "stok hampir habis" adalah klaim
-                            // medis yang hanya boleh muncul bila stok pasien
-                            // terbukti rendah dari data backend, sedangkan
-                            // stok tersebut belum dapat diakses akun patient.
+                            // quantity_remaining kini sudah tersedia lewat
+                            // GET /medicine-schedules/my, tetapi backend tidak
+                            // menentukan ambang batas "stok hampir habis",
+                            // sedangkan peringatan itu adalah klaim medis.
                             // Widget-nya tetap ada di
                             // widgets/medicine_warning_card.dart.
-                            // TODO: Render kembali MedicineWarningCard ketika
-                            // quantity_remaining pasien sudah bisa diambil dan
-                            // ambang batas peringatan ditentukan backend.
-                            MedicineStockCard(),
+                            // TODO: Render kembali MedicineWarningCard bila
+                            // backend menetapkan ambang batas peringatannya.
+                            MedicineStockCard(
+                              schedule: _lowestStockSchedule,
+                              totalCount: _schedules.length,
+                              errorMessage: _scheduleError,
+                            ),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                            MedicineScheduleCard(),
+                            MedicineScheduleCard(
+                              schedule: _nextDrinkSchedule,
+                              errorMessage: _scheduleError,
+                            ),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                            MedicineListCard(),
+                            MedicineListCard(
+                              schedules: _schedules,
+                              errorMessage: _scheduleError,
+                            ),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                            MedicineOrderButton(),
+                            const MedicineOrderButton(),
 
-                            SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                            MedicineNoteCard(),
+                            const MedicineNoteCard(),
 
-                            SizedBox(height: 32),
+                            const SizedBox(height: 32),
                           ],
                         ),
                       ),

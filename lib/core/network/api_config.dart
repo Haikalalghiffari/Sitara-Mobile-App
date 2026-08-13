@@ -31,6 +31,15 @@ class ApiEndpoints {
   static const String profile = '/auth/profile';
   static const String patientProfile = '/patients/profile';
 
+  /// `GET /treatments/my`, daftar pengobatan milik pemegang token.
+  static const String myTreatments = '/treatments/my';
+
+  /// `GET /medicine-schedules/my`, jadwal minum obat milik pemegang token.
+  ///
+  /// Bukan `/medicine-schedules`, yang mengembalikan jadwal seluruh pasien dan
+  /// hanya dapat diakses role nakes.
+  static const String myMedicineSchedules = '/medicine-schedules/my';
+
   static const String notifications = '/notifications';
 
   /// `PUT /notifications/read-all`, menandai seluruh notifikasi milik pemegang

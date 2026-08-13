@@ -25,6 +25,12 @@ import '../../login/services/auth_service.dart';
 import '../../profile/models/patient_profile.dart';
 import '../../profile/services/patient_service.dart';
 
+import '../../progress/models/my_treatment.dart';
+import '../../progress/services/treatment_service.dart';
+
+import '../../medicine/models/my_medicine_schedule.dart';
+import '../../medicine/services/medicine_schedule_service.dart';
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -35,10 +41,19 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
   final PatientService _patientService = PatientService();
+  final TreatmentService _treatmentService = TreatmentService();
+  final MedicineScheduleService _medicineScheduleService =
+      MedicineScheduleService();
 
   UserProfile? _userProfile;
   PatientProfile? _patientProfile;
   String? _errorMessage;
+
+  List<MyTreatment> _treatments = <MyTreatment>[];
+  String? _treatmentError;
+
+  List<MyMedicineSchedule> _medicineSchedules = <MyMedicineSchedule>[];
+  String? _medicineScheduleError;
 
   @override
   void initState() {
@@ -46,6 +61,8 @@ class _HomePageState extends State<HomePage> {
     // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
     // berulang setiap kali widget di-rebuild.
     _loadProfile();
+    _loadTreatments();
+    _loadMedicineSchedules();
   }
 
   Future<void> _loadProfile() async {
@@ -63,6 +80,7 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _userProfile = user;
         _patientProfile = patient;
+        _reconcileTreatments();
       });
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -82,6 +100,101 @@ class _HomePageState extends State<HomePage> {
         _errorMessage = ApiException.unexpectedMessage;
       });
     }
+  }
+
+  Future<void> _loadTreatments() async {
+    try {
+      final List<MyTreatment> treatments =
+          await _treatmentService.getMyTreatments();
+
+      if (!mounted) return;
+
+      setState(() {
+        _treatments = treatments;
+        _treatmentError = null;
+        _reconcileTreatments();
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _treatments = <MyTreatment>[];
+        _treatmentError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _treatments = <MyTreatment>[];
+        _treatmentError = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
+  /// Memuat `GET /medicine-schedules/my` memakai service yang sama dengan
+  /// MedicinePage, sehingga tidak ada endpoint atau service tambahan.
+  ///
+  /// Backend sudah menyaring berdasarkan pemegang token, dan responsnya tidak
+  /// memuat `patient_id`, jadi tidak ada penyaringan ulang di sisi aplikasi.
+  Future<void> _loadMedicineSchedules() async {
+    try {
+      final List<MyMedicineSchedule> schedules =
+          await _medicineScheduleService.getMySchedules();
+
+      if (!mounted) return;
+
+      setState(() {
+        _medicineSchedules = schedules;
+        _medicineScheduleError = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _medicineSchedules = <MyMedicineSchedule>[];
+        _medicineScheduleError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _medicineSchedules = <MyMedicineSchedule>[];
+        _medicineScheduleError = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
+  /// Backend `GET /treatments/my` seharusnya hanya mengirim pengobatan milik
+  /// pemegang token. Bila `patient_id` tidak cocok dengan profil yang sedang
+  /// login, data tidak ditampilkan.
+  void _reconcileTreatments() {
+    final int? patientId = _patientProfile?.id;
+    if (patientId == null) return;
+
+    if (_treatments.any((MyTreatment item) => item.patientId != patientId)) {
+      _treatments = <MyTreatment>[];
+      _treatmentError =
+          'Data pengobatan tidak dapat ditampilkan karena server '
+          'mengirim data milik pasien lain.';
+    }
+  }
+
+  MyTreatment? get _currentTreatment {
+    return MyTreatment.selectCurrent(_treatments);
+  }
+
+  MyMedicineSchedule? get _nextDrinkSchedule {
+    return MyMedicineSchedule.selectNextDrink(_medicineSchedules);
   }
 
   /// Memakai [AuthService.logout] yang sudah ada agar tidak ada mekanisme
@@ -136,16 +249,26 @@ class _HomePageState extends State<HomePage> {
                               patient: _patientProfile,
                               user: _userProfile,
                               errorMessage: _errorMessage,
-                              onRetry: _loadProfile,
+                              onRetry: () {
+                                _loadProfile();
+                                _loadTreatments();
+                                _loadMedicineSchedules();
+                              },
                             ),
 
                             const SizedBox(height: 24),
 
-                            const HomeProgressCard(),
+                            HomeProgressCard(
+                              treatment: _currentTreatment,
+                              errorMessage: _treatmentError,
+                            ),
 
                             const SizedBox(height: 24),
 
-                            const HomeMedicationTimerCard(),
+                            HomeMedicationTimerCard(
+                              schedule: _nextDrinkSchedule,
+                              errorMessage: _medicineScheduleError,
+                            ),
 
                             const SizedBox(height: 28),
 

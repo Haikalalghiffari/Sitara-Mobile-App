@@ -4,18 +4,32 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Kartu ini sengaja menampilkan empty state, bukan tanggal dan lokasi contoh.
+import '../models/my_medicine_schedule.dart';
+
+/// Kartu jadwal minum obat berikutnya.
 ///
-// TODO: Integrasikan jadwal pengambilan setelah backend menyediakan endpoint
-// yang dapat diakses role patient. ControlScheduleResponse hanya memuat
-// treatment_id, control_date, control_time, status, dan doctor_note; tidak ada
-// nama fasilitas, alamat, latitude, maupun longitude, sehingga tombol
-// "Lihat Peta" belum punya sumber data dan dibiarkan nonaktif.
+/// Jam diambil dari `drink_time` pada `MyMedicineScheduleResponse`. Judul
+/// kartu memakai kata "minum" karena `drink_time` adalah waktu minum harian,
+/// bukan tanggal pengambilan obat.
+///
+// Tanggal dan lokasi pengambilan obat tetap empty state: tidak ada field nama
+// fasilitas, alamat, latitude, maupun longitude di endpoint mana pun yang
+// dapat diakses role patient, sehingga tombol "Lihat Peta" dibiarkan nonaktif.
+// control_date pada ControlScheduleResponse sengaja tidak dipakai di sini
+// karena itu jadwal kontrol, bukan jadwal minum obat.
 class MedicineScheduleCard extends StatelessWidget {
-  const MedicineScheduleCard({super.key});
+  const MedicineScheduleCard({
+    super.key,
+    this.schedule,
+    this.errorMessage,
+  });
+
+  final MyMedicineSchedule? schedule;
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
+    final String? timeLabel = schedule?.drinkTimeLabel;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -38,7 +52,7 @@ class MedicineScheduleCard extends StatelessWidget {
 
     Expanded(
       child: Text(
-        "Jadwal Pengambilan Berikutnya",
+        "Jadwal Minum Obat Berikutnya",
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
@@ -52,20 +66,20 @@ class MedicineScheduleCard extends StatelessWidget {
           const SizedBox(height: 28),
 
           Row(
-            children: const [
+            children: [
 
-              Icon(
+              const Icon(
                 Icons.calendar_month,
                 color: Colors.white,
                 size: 30,
               ),
 
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
 
               Expanded(
                 child: Text(
-                  "Belum tersedia",
-                  style: TextStyle(
+                  timeLabel ?? "Belum tersedia",
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 34,
@@ -79,22 +93,22 @@ class MedicineScheduleCard extends StatelessWidget {
 
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
 
-              Icon(
+              const Icon(
                 Icons.location_on_outlined,
                 color: Colors.white,
                 size: 30,
               ),
 
-              SizedBox(width: 14),
+              const SizedBox(width: 14),
 
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
 
-                    Text(
+                    const Text(
                       "Lokasi belum tersedia",
                       style: TextStyle(
                         color: Colors.white,
@@ -103,11 +117,12 @@ class MedicineScheduleCard extends StatelessWidget {
                       ),
                     ),
 
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
 
                     Text(
-                      "Jadwal akan muncul setelah petugas kesehatan melengkapi data pengambilan obat.",
-                      style: TextStyle(
+                      errorMessage ??
+                          "Tanggal dan lokasi pengambilan obat belum tersedia di aplikasi. Tanyakan kepada petugas kesehatan.",
+                      style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 17,
                       ),
