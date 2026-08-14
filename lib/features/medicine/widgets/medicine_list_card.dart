@@ -8,10 +8,8 @@ import '../models/my_medicine_schedule.dart';
 
 /// Daftar obat aktif milik pasien dari `GET /medicine-schedules/my`.
 ///
-/// Dosis dan jam minum berasal dari `dosage` serta `drink_time`. Nama obat
-/// tidak ditampilkan karena response hanya memuat `medicine_id`; nama ada di
-/// `MedicineResponse`, tetapi seluruh endpoint `/medicines` memakai
-/// `require_nakes` sehingga akun pasien selalu ditolak 403.
+/// Nama berasal dari `medicine_name`, dosis dari `dosage`, jam minum dari
+/// `drink_time`. Tidak ada mapping `medicine_id` ke nama di aplikasi.
 class MedicineListCard extends StatelessWidget {
   const MedicineListCard({
     super.key,
@@ -82,26 +80,13 @@ class MedicineListCard extends StatelessWidget {
             for (int index = 0; index < schedules.length; index++) ...[
               if (index > 0) const Divider(height: 1),
               _medicineTile(
-                name: "Obat #${schedules[index].medicineId}",
+                name: schedules[index].displayName,
                 dosage: schedules[index].dosage.trim().isEmpty
                     ? "Dosis belum tersedia"
                     : schedules[index].dosage,
                 badge: schedules[index].drinkTimeLabel ?? "Jam belum tersedia",
               ),
             ],
-
-            const Divider(height: 1),
-
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.cardPadding),
-              child: Text(
-                "Nama obat belum dapat ditampilkan di aplikasi pasien. Cocokkan dengan kemasan obat Anda atau tanyakan kepada petugas kesehatan.",
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                      height: 1.5,
-                    ),
-              ),
-            ),
           ],
         ],
       ),

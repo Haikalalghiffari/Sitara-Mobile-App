@@ -501,6 +501,7 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
 
                   RefillHistorySection(
                     refills: _refills,
+                    schedules: _schedules,
                     isLoading: _isLoadingRefills,
                     errorMessage: _refillsError,
                     onRetry: _loadRefills,

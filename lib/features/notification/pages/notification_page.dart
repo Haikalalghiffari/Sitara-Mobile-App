@@ -170,7 +170,29 @@ class _NotificationPageState extends State<NotificationPage> {
     setState(() => _selectedFilter = filter);
   }
 
-  /// `PUT /notifications/{id}/read` saat kartunya ditekan.
+  /// `PUT /notifications/{id}/read` saat kartunya ditekan, lalu membuka
+  /// halaman terkait bila notifikasinya merujuk ke jadwal kontrol.
+  ///
+  /// Notifikasi tidak dihapus. Bila sudah dibaca, permintaan baca dilewati
+  /// dan navigasi tetap dijalankan.
+  Future<void> _handleNotificationTap(NotificationModel item) async {
+    if (!item.isRead) {
+      await _markAsRead(item);
+      if (!mounted) return;
+    }
+
+    if (!item.isControlScheduleNotification) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MedicinePage(
+          highlightedControlScheduleId: item.referenceId,
+        ),
+      ),
+    );
+  }
+
   Future<void> _markAsRead(NotificationModel item) async {
     if (item.isRead || _isBusy) return;
 
@@ -493,7 +515,7 @@ class _NotificationPageState extends State<NotificationPage> {
           subtitle: item.message,
           time: _timeLabel(item),
           isRead: item.isRead,
-          onTap: () => _markAsRead(item),
+          onTap: () => _handleNotificationTap(item),
         ),
       );
     }

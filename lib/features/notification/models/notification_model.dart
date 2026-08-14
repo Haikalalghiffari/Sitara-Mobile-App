@@ -55,6 +55,17 @@ class NotificationModel {
     );
   }
 
+  /// Notifikasi jadwal kontrol dari backend.
+  ///
+  /// `NotificationType.CONTROL` bernilai `control`;
+  /// `NotificationReferenceType.CONTROL_SCHEDULE` bernilai `control_schedule`.
+  /// Perbandingan tidak peka huruf besar/kecil karena serializer enum bisa
+  /// mengirim nama atau nilai.
+  bool get isControlScheduleNotification {
+    if (type.toLowerCase() == 'control') return true;
+    return referenceType?.toLowerCase() == 'control_schedule';
+  }
+
   /// Waktu pembuatan dalam zona waktu perangkat.
   ///
   /// Backend mengirim tipe `date-time`. Bila nilainya menyertakan penanda UTC,

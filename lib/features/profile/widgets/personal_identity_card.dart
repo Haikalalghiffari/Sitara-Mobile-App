@@ -5,7 +5,7 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../models/patient_profile.dart';
-import 'profile_notice.dart';
+import '../../settings/pages/edit_profile_page.dart';
 
 class PersonalIdentityCard extends StatefulWidget {
   const PersonalIdentityCard({
@@ -103,10 +103,14 @@ class _PersonalIdentityCardState extends State<PersonalIdentityCard> {
             const Spacer(),
 
             TextButton.icon(
-              onPressed: () => showProfileNotice(
-                context,
-                profileEditUnavailableMessage,
-              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const EditProfilePage(),
+                  ),
+                );
+              },
 
               icon: const Icon(
                 Icons.edit_outlined,

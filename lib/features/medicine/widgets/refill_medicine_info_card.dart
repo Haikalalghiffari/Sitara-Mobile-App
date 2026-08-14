@@ -9,10 +9,9 @@ import '../models/refill.dart';
 
 /// Obat yang akan dipesan ulang, beserta status permintaan terakhir.
 ///
-/// Data obat berasal dari `GET /medicine-schedules/my` (`medicine_id`,
-/// `dosage`, `quantity_initial`, `quantity_remaining`). Nama obat tidak
-/// ditampilkan karena response tidak memuatnya; satu-satunya sumber nama adalah
-/// `MedicineResponse` pada `/medicines` yang memakai `require_nakes`.
+/// Data obat berasal dari `GET /medicine-schedules/my` (`medicine_name`,
+/// `dosage`, `quantity_initial`, `quantity_remaining`). Nama ditampilkan
+/// apa adanya dari `medicine_name`, bukan dari mapping `medicine_id`.
 ///
 /// Status berasal dari `RefillResponse.status` (`GET /refills/my`), bukan dari
 /// status buatan aplikasi.
@@ -61,7 +60,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
                     Text(
                       item == null
                           ? "Data obat belum tersedia"
-                          : "Obat #${item.medicineId}",
+                          : item.displayName,
                       style: Theme.of(context)
                           .textTheme
                           .titleLarge

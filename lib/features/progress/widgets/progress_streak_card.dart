@@ -4,18 +4,36 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Kartu ini sengaja menampilkan empty state, bukan jumlah hari contoh.
+import '../models/my_treatment.dart';
+
+/// Kartu runtutan harian.
 ///
-// TODO: Integrasikan runtutan harian setelah backend menyediakan endpoint
-// verifikasi minum obat yang dapat diakses role patient. Backend tidak
-// menyimpan nilai runtutan secara langsung; nilai ini perlu dihitung dari
-// verification_date pada VideoVerificationResponse yang berstatus verified,
-// dan data tersebut belum dapat diakses pasien.
+/// Backend belum memiliki data verifikasi minum obat. Sementara ini, angka
+/// yang ditampilkan adalah `elapsedDays` dari [TreatmentProgress] — rumus
+/// tanggal yang sama dengan [ProgressTimelineCard], dihitung dari
+/// `therapy_start_date` sampai hari ini. Bukan streak verifikasi aktual.
+///
+// TODO: Saat backend sudah memiliki data actual medication adherence /
+// verified medication intake dari AI VOT atau medication verification, ganti
+// streak berbasis kalender ini dengan runtutan hari yang benar-benar
+// terverifikasi. Jangan menghitung streak dari therapy_start_date lagi.
 class ProgressStreakCard extends StatelessWidget {
-  const ProgressStreakCard({super.key});
+  const ProgressStreakCard({
+    super.key,
+    this.progress,
+    this.errorMessage,
+  });
+
+  /// Perhitungan waktu terapi yang sama dengan [ProgressTimelineCard].
+  final TreatmentProgress? progress;
+
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
+    final int? elapsedDays = progress?.elapsedDays;
+    final bool hasStreak = elapsedDays != null && elapsedDays > 0;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -62,7 +80,7 @@ class ProgressStreakCard extends StatelessWidget {
               const SizedBox(height: 18),
 
               Text(
-                "Belum tersedia",
+                hasStreak ? "$elapsedDays Hari" : "Belum tersedia",
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -72,7 +90,10 @@ class ProgressStreakCard extends StatelessWidget {
               const SizedBox(height: 22),
 
               Text(
-                "Runtutan harian akan muncul setelah data verifikasi minum obat tersedia.",
+                hasStreak
+                    ? "Anda telah mempertahankan rutinitas pengobatan dengan baik."
+                    : (errorMessage ??
+                        "Runtutan harian akan muncul setelah data pengobatan tersedia."),
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white,
                       height: 1.7,

@@ -4,6 +4,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../models/my_medicine_schedule.dart';
 import '../models/refill.dart';
 
 /// Riwayat pesan ulang obat dari `GET /refills/my`.
@@ -15,12 +16,17 @@ class RefillHistorySection extends StatelessWidget {
   const RefillHistorySection({
     super.key,
     this.refills = const <Refill>[],
+    this.schedules = const <MyMedicineSchedule>[],
     this.isLoading = false,
     this.errorMessage,
     this.onRetry,
   });
 
   final List<Refill> refills;
+
+  /// Jadwal dari `GET /medicine-schedules/my`, dipakai hanya untuk menampilkan
+  /// `medicine_name`. Bukan katalog `/medicines`.
+  final List<MyMedicineSchedule> schedules;
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback? onRetry;
@@ -154,7 +160,7 @@ class RefillHistorySection extends StatelessWidget {
 
               Expanded(
                 child: Text(
-                  "Obat #${refill.medicineId}",
+                  MyMedicineSchedule.nameForId(schedules, refill.medicineId),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),

@@ -1,12 +1,12 @@
 /// Response `MyMedicineScheduleResponse` dari `GET /medicine-schedules/my`.
 ///
 /// Field mengikuti persis schema backend, tanpa tambahan. Backend tidak
-/// mengirim id jadwal, nama obat, satuan obat, maupun jumlah dosis per hari,
-/// sehingga hal-hal tersebut tidak dapat ditampilkan.
+/// mengirim id jadwal, satuan obat, maupun jumlah dosis per hari.
 class MyMedicineSchedule {
   const MyMedicineSchedule({
     required this.treatmentId,
     required this.medicineId,
+    required this.medicineName,
     required this.dosage,
     required this.quantityInitial,
     required this.quantityRemaining,
@@ -15,10 +15,12 @@ class MyMedicineSchedule {
 
   final int treatmentId;
 
-  /// Hanya id katalog obat. Namanya ada di `MedicineResponse`, tetapi seluruh
-  /// endpoint `/medicines` memakai `require_nakes` sehingga akun pasien
-  /// selalu ditolak 403.
+  /// Dipakai POST /refills, bukan untuk ditampilkan sebagai nama obat.
   final int medicineId;
+
+  /// Nama dari field `medicine_name` pada response. Bukan hasil mapping
+  /// `medicine_id` di aplikasi.
+  final String medicineName;
 
   /// Teks bebas dari petugas (`max_length=100`), misalnya aturan pakai.
   /// Formatnya tidak dijamin, jadi tidak diurai menjadi angka apa pun.
@@ -34,6 +36,7 @@ class MyMedicineSchedule {
     return MyMedicineSchedule(
       treatmentId: (json['treatment_id'] as num?)?.toInt() ?? 0,
       medicineId: (json['medicine_id'] as num?)?.toInt() ?? 0,
+      medicineName: json['medicine_name']?.toString() ?? '',
       dosage: json['dosage']?.toString() ?? '',
       quantityInitial: (json['quantity_initial'] as num?)?.toInt() ?? 0,
       quantityRemaining: (json['quantity_remaining'] as num?)?.toInt() ?? 0,
@@ -82,6 +85,28 @@ class MyMedicineSchedule {
     final String hour = (minutes ~/ 60).toString().padLeft(2, '0');
     final String minute = (minutes % 60).toString().padLeft(2, '0');
     return '$hour.$minute';
+  }
+
+  /// Nama yang ditampilkan di UI.
+  ///
+  /// Tidak pernah memakai `medicine_id`. Bila `medicine_name` kosong, fallback
+  /// netral dipakai supaya label "Obat #1" tidak muncul lagi.
+  String get displayName {
+    final String name = medicineName.trim();
+    if (name.isEmpty) return 'Nama obat belum tersedia';
+    return name;
+  }
+
+  /// Nama tampilan dari jadwal obat yang sudah diambil lewat
+  /// `GET /medicine-schedules/my`. Bukan mapping hardcode `medicine_id`.
+  static String nameForId(
+    List<MyMedicineSchedule> schedules,
+    int medicineId,
+  ) {
+    for (final MyMedicineSchedule item in schedules) {
+      if (item.medicineId == medicineId) return item.displayName;
+    }
+    return 'Nama obat belum tersedia';
   }
 
   /// Kapan `drink_time` berikutnya jatuh, dalam zona waktu perangkat.
@@ -169,5 +194,6 @@ class MyMedicineSchedule {
   @override
   String toString() =>
       'MyMedicineSchedule(treatmentId: $treatmentId, '
-      'medicineId: $medicineId, drinkTime: $drinkTime)';
+      'medicineId: $medicineId, medicineName: $medicineName, '
+      'drinkTime: $drinkTime)';
 }

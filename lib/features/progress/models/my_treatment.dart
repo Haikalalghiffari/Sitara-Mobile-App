@@ -201,6 +201,10 @@ class TreatmentProgress {
     required this.fraction,
   });
 
+  /// Hari terapi yang sudah berjalan, termasuk hari ini.
+  ///
+  /// Dipakai bersama oleh [ProgressTimelineCard] dan [ProgressStreakCard]
+  /// agar angka streak sama dengan "Hari ke-n" pada timeline.
   final int elapsedDays;
   final int totalDays;
   final int elapsedWeeks;
@@ -214,5 +218,19 @@ class TreatmentProgress {
     if (value < 0) return 0;
     if (value > 100) return 100;
     return value;
+  }
+
+  /// Temporary assumption: pasien dianggap selalu patuh selama hari terapi
+  /// yang sudah berjalan. Bernilai null bila terapi belum dimulai.
+  ///
+  /// Bukan hasil AI VOT dan bukan hasil verifikasi dosis.
+  ///
+  // TODO: Saat backend sudah menyediakan actual medication adherence /
+  // verified medication intake, ganti asumsi 100% ini dengan data aktual
+  // untuk Progress dan Profile. Jangan menghitung kepatuhan dari
+  // therapy_start_date / therapy_end_date lagi.
+  double? get assumedAdherence {
+    if (elapsedDays <= 0) return null;
+    return 1.0;
   }
 }

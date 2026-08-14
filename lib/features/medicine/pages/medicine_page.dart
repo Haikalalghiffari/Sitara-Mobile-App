@@ -25,7 +25,16 @@ import '../../progress/pages/progress_page.dart';
 import '../../profile/pages/profile_page.dart';
 
 class MedicinePage extends StatefulWidget {
-  const MedicinePage({super.key});
+  const MedicinePage({
+    super.key,
+    this.highlightedControlScheduleId,
+  });
+
+  /// Id jadwal kontrol dari `notification.reference_id`.
+  ///
+  /// Dipakai untuk menampilkan jadwal yang diklik, setelah dicocokkan dengan
+  /// hasil `GET /control-schedules/my`. Null bila halaman dibuka dari navbar.
+  final int? highlightedControlScheduleId;
 
   @override
   State<MedicinePage> createState() => _MedicinePageState();
@@ -130,6 +139,13 @@ class _MedicinePageState extends State<MedicinePage> {
   }
 
   ControlSchedule? get _upcomingControlSchedule {
+    final int? highlightedId = widget.highlightedControlScheduleId;
+    if (highlightedId != null) {
+      for (final ControlSchedule item in _controlSchedules) {
+        if (item.id == highlightedId) return item;
+      }
+    }
+
     return ControlSchedule.selectUpcoming(_controlSchedules);
   }
 

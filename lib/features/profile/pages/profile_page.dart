@@ -24,6 +24,9 @@ import '../../login/services/auth_service.dart';
 import '../models/patient_profile.dart';
 import '../services/patient_service.dart';
 
+import '../../progress/models/my_treatment.dart';
+import '../../progress/services/treatment_service.dart';
+
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -34,11 +37,14 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final AuthService _authService = AuthService();
   final PatientService _patientService = PatientService();
+  final TreatmentService _treatmentService = TreatmentService();
 
   UserProfile? _userProfile;
   PatientProfile? _patientProfile;
   String? _errorMessage;
   bool _isLoading = true;
+
+  List<MyTreatment> _treatments = <MyTreatment>[];
 
   @override
   void initState() {
@@ -46,6 +52,7 @@ class _ProfilePageState extends State<ProfilePage> {
     // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
     // berulang setiap kali widget di-rebuild.
     _loadProfile();
+    _loadTreatments();
   }
 
   Future<void> _loadProfile() async {
@@ -65,6 +72,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _userProfile = user;
         _patientProfile = patient;
         _isLoading = false;
+        _reconcileTreatments();
       });
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -86,6 +94,53 @@ class _ProfilePageState extends State<ProfilePage> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _loadTreatments() async {
+    try {
+      final List<MyTreatment> treatments =
+          await _treatmentService.getMyTreatments();
+
+      if (!mounted) return;
+
+      setState(() {
+        _treatments = treatments;
+        _reconcileTreatments();
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _treatments = <MyTreatment>[];
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _treatments = <MyTreatment>[];
+      });
+    }
+  }
+
+  /// Backend `GET /treatments/my` seharusnya hanya mengirim pengobatan milik
+  /// pemegang token. Bila `patient_id` tidak cocok dengan profil yang sedang
+  /// login, data tidak ditampilkan.
+  void _reconcileTreatments() {
+    final int? patientId = _patientProfile?.id;
+    if (patientId == null) return;
+
+    if (_treatments.any((MyTreatment item) => item.patientId != patientId)) {
+      _treatments = <MyTreatment>[];
+    }
+  }
+
+  MyTreatment? get _currentTreatment {
+    return MyTreatment.selectCurrent(_treatments);
   }
 
   /// Token ditolak backend, sesi tidak bisa dilanjutkan.
@@ -120,7 +175,10 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_errorMessage != null) {
       return _ProfileCardError(
         message: _errorMessage!,
-        onRetry: _loadProfile,
+        onRetry: () {
+          _loadProfile();
+          _loadTreatments();
+        },
       );
     }
 
@@ -131,6 +189,7 @@ class _ProfilePageState extends State<ProfilePage> {
       return ProfileSummaryCard(
         patient: patient,
         user: user,
+        progress: _currentTreatment?.progress,
       );
     }
 

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
-import '../../../core/theme/spacing.dart';
 
 import '../models/patient_profile.dart';
-import 'profile_notice.dart';
+import '../../settings/pages/settings_page.dart';
+import '../../settings/pages/change_profile_picture_page.dart';
 
 class PersonalInformationHeader extends StatelessWidget {
   const PersonalInformationHeader({
@@ -49,10 +49,14 @@ class PersonalInformationHeader extends StatelessWidget {
             ),
 
             IconButton(
-              onPressed: () => showProfileNotice(
-                context,
-                profileSettingsUnavailableMessage,
-              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SettingsPage(),
+                  ),
+                );
+              },
               icon: const Icon(
                 Icons.settings_outlined,
                 color: AppColors.primary,
@@ -68,7 +72,7 @@ class PersonalInformationHeader extends StatelessWidget {
         //--------------------------------------------------
 
         Stack(
-          alignment: Alignment.bottomRight,
+          clipBehavior: Clip.none,
           children: [
 
             Container(
@@ -89,27 +93,36 @@ class PersonalInformationHeader extends StatelessWidget {
               ),
             ),
 
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white,
-                  width: 3,
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 3,
+                  ),
                 ),
-              ),
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                onPressed: () => showProfileNotice(
-                  context,
-                  profileEditUnavailableMessage,
-                ),
-                icon: const Icon(
-                  Icons.edit,
-                  size: 18,
-                  color: Colors.white,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  splashRadius: 20,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ChangeProfilePicturePage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.edit,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),

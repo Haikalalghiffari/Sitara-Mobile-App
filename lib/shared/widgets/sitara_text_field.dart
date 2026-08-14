@@ -16,6 +16,10 @@ class SitaraTextField extends StatelessWidget {
     this.suffixIcon,
     this.keyboardType,
     this.labelTrailing,
+    this.maxLines = 1,
+    this.readOnly = false,
+    this.onTap,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   final String label;
@@ -26,6 +30,10 @@ class SitaraTextField extends StatelessWidget {
   final Widget? suffixIcon;
   final TextInputType? keyboardType;
   final Widget? labelTrailing;
+  final int maxLines;
+  final bool readOnly;
+  final VoidCallback? onTap;
+  final TextCapitalization textCapitalization;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +63,10 @@ class SitaraTextField extends StatelessWidget {
           controller: controller,
           obscureText: obscureText,
           keyboardType: keyboardType,
+          maxLines: obscureText ? 1 : maxLines,
+          readOnly: readOnly,
+          onTap: onTap,
+          textCapitalization: textCapitalization,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.onSurfaceLight,
               ),

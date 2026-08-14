@@ -5,8 +5,9 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../../login/models/user_profile.dart';
+import '../../progress/models/my_treatment.dart';
+import '../../settings/pages/change_profile_picture_page.dart';
 import '../models/patient_profile.dart';
-import 'profile_notice.dart';
 
 /// Menampilkan data profil yang diberikan oleh [ProfilePage].
 ///
@@ -17,10 +18,14 @@ class ProfileSummaryCard extends StatelessWidget {
     super.key,
     required this.patient,
     required this.user,
+    this.progress,
   });
 
   final PatientProfile patient;
   final UserProfile user;
+
+  /// Perhitungan waktu terapi yang sama dengan ProgressPage.
+  final TreatmentProgress? progress;
 
   /// Backend dapat mengirim `full_name` kosong bila data pasien belum
   /// dilengkapi petugas, sehingga username dipakai sebagai cadangan.
@@ -32,6 +37,16 @@ class ProfileSummaryCard extends StatelessWidget {
   String get _identityLabel => patient.medicalRecordNumber.isNotEmpty
       ? "ID Pasien: ${patient.medicalRecordNumber}"
       : "ID User: ${user.id}";
+
+  /// Label kepatuhan yang sama dengan ProgressSummaryCard.
+  ///
+  /// Null/`—` bila belum ada treatment atau terapi belum berjalan, supaya
+  /// 100% tidak tampil tanpa data pengobatan.
+  String get _adherenceLabel {
+    final double? value = progress?.assumedAdherence;
+    if (value == null) return "—";
+    return "${(value * 100).round()}%";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,17 +69,17 @@ class ProfileSummaryCard extends StatelessWidget {
               Container(
                 width: 120,
                 height: 120,
-                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: AppColors.primaryContainer,
+                    color: AppColors.primary,
                     width: 4,
                   ),
                 ),
-                child: const CircleAvatar(
-                  backgroundImage: AssetImage(
+                child: ClipOval(
+                  child: Image.asset(
                     "assets/images/profile.png",
+                    fit: BoxFit.cover,
                   ),
                 ),
               ),
@@ -73,8 +88,8 @@ class ProfileSummaryCard extends StatelessWidget {
                 right: -2,
                 bottom: -2,
                 child: Container(
-                  width: 38,
-                  height: 38,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     shape: BoxShape.circle,
@@ -86,10 +101,14 @@ class ProfileSummaryCard extends StatelessWidget {
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     splashRadius: 20,
-                    onPressed: () => showProfileNotice(
-                      context,
-                      profileEditUnavailableMessage,
-                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ChangeProfilePicturePage(),
+                        ),
+                      );
+                    },
                     icon: const Icon(
                       Icons.edit,
                       color: Colors.white,
@@ -134,16 +153,9 @@ class ProfileSummaryCard extends StatelessWidget {
 
           const SizedBox(height: 26),
 
-          // Kedua angka di bawah ini tidak punya sumber di backend.
-          //
-          // Masa pengobatan memerlukan `therapy_start_date` dari Treatment yang
-          // belum dapat diakses role patient. Kepatuhan tidak ada sama sekali di
-          // ERD, jadi tidak ada nilai yang bisa dihitung. Menampilkan angka di
-          // sini akan membuat pasien menyimpulkan pengobatannya berjalan baik
-          // padahal aplikasi tidak mengetahuinya.
-          //
-          // TODO: Isi dari backend setelah pasien punya cara sah membaca
-          // treatment miliknya, dan setelah metrik kepatuhan tersedia.
+          // Masa pengobatan memakai TreatmentProgress.totalDays, rumus yang
+          // sama dengan ProgressTimelineCard. Kepatuhan memakai
+          // assumedAdherence yang sama dengan ProgressSummaryCard.
           IntrinsicHeight(
             child: Row(
               children: [
@@ -151,7 +163,9 @@ class ProfileSummaryCard extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-                        "—",
+                        progress == null
+                            ? "—"
+                            : "${progress!.totalDays} hari",
                         style:
                             Theme.of(context).textTheme.titleLarge?.copyWith(
                                   color: AppColors.primary,
@@ -179,7 +193,7 @@ class ProfileSummaryCard extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-                        "—",
+                        _adherenceLabel,
                         style:
                             Theme.of(context).textTheme.titleLarge?.copyWith(
                                   color: AppColors.primary,

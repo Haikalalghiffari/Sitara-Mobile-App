@@ -6,28 +6,35 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Kartu ini sengaja menampilkan empty state, bukan persentase contoh.
-///
-// TODO: Integrasikan kepatuhan setelah backend menyediakan endpoint yang
-// dapat diakses role patient. Data kepatuhan berasal dari
-// VideoVerificationResponse (status: pending/verified/rejected), tetapi
-// response tersebut hanya memuat medicine_schedule_id, yang mengarah ke
-// treatment_id, yang hanya bisa diperoleh dari GET /treatments
-// (require_nakes).
-class ProgressSummaryCard extends StatelessWidget {
-  /// Bernilai null selama data kepatuhan belum tersedia dari backend.
-  ///
-  /// Sengaja nullable dan bukan 0, karena menampilkan "0%" berarti menyatakan
-  /// pasien tidak pernah minum obat sama sekali.
-  final double? progress;
+import '../models/my_treatment.dart';
 
+/// Kartu kepatuhan keseluruhan.
+///
+/// Backend belum menyediakan data dosis yang diminum atau terverifikasi.
+/// Sementara ini, bila terapi sudah berjalan, nilai yang ditampilkan adalah
+/// 100% sebagai **asumsi sementara** bahwa pasien patuh setiap hari sejak
+/// `therapy_start_date`. Bukan hasil AI VOT, bukan hasil verifikasi dosis.
+///
+// TODO: Saat backend sudah memiliki data actual medication adherence /
+// verified medication intake dari AI VOT atau medication verification, ganti
+// asumsi 100% ini dengan data aktual. Jangan menghitung kepatuhan dari
+// therapy_start_date / therapy_end_date lagi.
+class ProgressSummaryCard extends StatelessWidget {
   const ProgressSummaryCard({
     super.key,
     this.progress,
+    this.errorMessage,
   });
+
+  /// Perhitungan waktu terapi yang sama dengan [ProgressTimelineCard].
+  final TreatmentProgress? progress;
+
+  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
+    final double? adherence = progress?.assumedAdherence;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -52,16 +59,16 @@ class ProgressSummaryCard extends StatelessWidget {
             width: 150,
             height: 150,
             child: CustomPaint(
-              painter: _ProgressPainter(progress ?? 0),
+              painter: _ProgressPainter(adherence ?? 0),
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
 
                     Text(
-                      progress == null
+                      adherence == null
                           ? "—"
-                          : "${(progress! * 100).round()}%",
+                          : "${(adherence * 100).round()}%",
                       style: Theme.of(context)
                           .textTheme
                           .headlineMedium
@@ -103,7 +110,10 @@ class ProgressSummaryCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           Text(
-            "Data kepatuhan belum tersedia. Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.",
+            adherence == null
+                ? (errorMessage ??
+                    "Data kepatuhan belum tersedia. Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.")
+                : "Kepatuhan pengobatan Anda saat ini sangat baik.",
             textAlign: TextAlign.center,
             style: Theme.of(context)
                 .textTheme
