@@ -41,11 +41,14 @@ class AiVotTopBar extends StatelessWidget {
             ),
           ),
 
-          _TopBarAction(
-            icon: Icons.help_outline_rounded,
-            tooltip: "Bantuan",
-            onTap: onHelp,
-          ),
+          if (onHelp != null)
+            _TopBarAction(
+              icon: Icons.help_outline_rounded,
+              tooltip: "Bantuan",
+              onTap: onHelp,
+            )
+          else
+            const SizedBox(width: AiVotTopBar._actionSize),
         ],
       ),
     );

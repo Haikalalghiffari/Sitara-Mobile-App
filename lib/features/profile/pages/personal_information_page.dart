@@ -10,6 +10,9 @@ import '../widgets/personal_identity_card.dart';
 import '../widgets/personal_contact_card.dart';
 import '../widgets/personal_health_card.dart';
 import '../widgets/privacy_note.dart';
+import '../widgets/profile_notice.dart';
+
+import '../../settings/widgets/settings_save_button.dart';
 
 import '../../login/models/user_profile.dart';
 import '../../login/pages/login_page.dart';
@@ -29,6 +32,9 @@ class PersonalInformationPage extends StatefulWidget {
 class _PersonalInformationPageState extends State<PersonalInformationPage> {
   final AuthService _authService = AuthService();
   final PatientService _patientService = PatientService();
+
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
   UserProfile? _userProfile;
   PatientProfile? _patientProfile;
@@ -59,6 +65,8 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
       setState(() {
         _userProfile = user;
         _patientProfile = patient;
+        _phoneController.text = patient.phone;
+        _addressController.text = patient.address;
         _isLoading = false;
       });
     } on ApiException catch (error) {
@@ -81,6 +89,21 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
         _isLoading = false;
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  /// Backend tidak menyediakan `PUT /patients/profile` untuk akun pasien.
+  ///
+  /// Form tetap bisa diisi, tetapi tombol simpan tidak mengirim permintaan
+  /// dan tidak menampilkan keberhasilan palsu.
+  void _saveContactChanges() {
+    showProfileNotice(context, profileEditUnavailableMessage);
   }
 
   /// Memakai [AuthService.logout] yang sudah ada agar tidak ada mekanisme
@@ -140,12 +163,20 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
 
         PersonalContactCard(
           patient: patient,
-          user: user,
+          phoneController: _phoneController,
+          addressController: _addressController,
         ),
 
         const SizedBox(height: 28),
 
         PersonalHealthCard(patient: patient),
+
+        const SizedBox(height: 32),
+
+        SettingsSaveButton(
+          label: "Simpan Perubahan",
+          onPressed: _saveContactChanges,
+        ),
 
         const SizedBox(height: 32),
 
@@ -200,7 +231,7 @@ class _StatusView extends StatelessWidget {
 
             Expanded(
               child: Text(
-                "Informasi Pribadi",
+                "Informasi Diri",
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,

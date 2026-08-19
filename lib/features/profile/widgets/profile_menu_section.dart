@@ -16,7 +16,7 @@ class ProfileMenuSection extends StatelessWidget {
       children: [
         ProfileMenuTile(
           icon: Icons.person_outline_rounded,
-          title: "Informasi Pribadi",
+          title: "Informasi Diri",
           subtitle: "Lihat dan ubah data pribadi Anda",
           onTap: () {
             Navigator.push(

@@ -18,6 +18,7 @@ class SitaraTextField extends StatelessWidget {
     this.labelTrailing,
     this.maxLines = 1,
     this.readOnly = false,
+    this.enabled = true,
     this.onTap,
     this.textCapitalization = TextCapitalization.none,
   });
@@ -32,6 +33,7 @@ class SitaraTextField extends StatelessWidget {
   final Widget? labelTrailing;
   final int maxLines;
   final bool readOnly;
+  final bool enabled;
   final VoidCallback? onTap;
   final TextCapitalization textCapitalization;
 
@@ -65,10 +67,13 @@ class SitaraTextField extends StatelessWidget {
           keyboardType: keyboardType,
           maxLines: obscureText ? 1 : maxLines,
           readOnly: readOnly,
+          enabled: enabled,
           onTap: onTap,
           textCapitalization: textCapitalization,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.onSurfaceLight,
+                color: readOnly || !enabled
+                    ? AppColors.textSecondary
+                    : AppColors.onSurfaceLight,
               ),
           decoration: InputDecoration(
             hintText: hint,
@@ -76,7 +81,9 @@ class SitaraTextField extends StatelessWidget {
                   color: AppColors.textHint,
                 ),
             filled: true,
-            fillColor: AppColors.surfaceLight,
+            fillColor: readOnly || !enabled
+                ? AppColors.surfaceContainerLow
+                : AppColors.surfaceLight,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
               vertical: AppSpacing.lg,
@@ -89,14 +96,27 @@ class SitaraTextField extends StatelessWidget {
               borderRadius: AppRadius.lgRadius,
               borderSide: const BorderSide(color: AppColors.outlineVariantLight),
             ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: AppRadius.lgRadius,
+              borderSide: const BorderSide(color: AppColors.outlineVariantLight),
+            ),
             focusedBorder: OutlineInputBorder(
               borderRadius: AppRadius.lgRadius,
-              borderSide: const BorderSide(
-                color: AppColors.healthPrimary,
-                width: 1.5,
+              borderSide: BorderSide(
+                color: readOnly
+                    ? AppColors.outlineVariantLight
+                    : AppColors.healthPrimary,
+                width: readOnly ? 1 : 1.5,
               ),
             ),
-            suffixIcon: suffixIcon,
+            suffixIcon: suffixIcon ??
+                (readOnly
+                    ? const Icon(
+                        Icons.lock_outline,
+                        color: AppColors.textHint,
+                        size: 20,
+                      )
+                    : null),
           ),
         ),
       ],

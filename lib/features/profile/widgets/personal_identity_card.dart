@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
+import '../../../core/utils/indonesian_date.dart';
+import '../../../shared/widgets/sitara_text_field.dart';
 
 import '../models/patient_profile.dart';
-import '../../settings/pages/edit_profile_page.dart';
 
+/// Identitas pasien yang hanya boleh dibaca.
+///
+/// Nama, NIK, tanggal lahir, dan jenis kelamin berasal dari
+/// `GET /patients/profile` dan tidak dikirim ulang ke server.
 class PersonalIdentityCard extends StatefulWidget {
   const PersonalIdentityCard({
     super.key,
@@ -22,29 +27,56 @@ class PersonalIdentityCard extends StatefulWidget {
 class _PersonalIdentityCardState extends State<PersonalIdentityCard> {
   static const String _unavailable = "Belum tersedia";
 
-  static const List<String> _monthNames = [
-    "Januari",
-    "Februari",
-    "Maret",
-    "April",
-    "Mei",
-    "Juni",
-    "Juli",
-    "Agustus",
-    "September",
-    "Oktober",
-    "November",
-    "Desember",
-  ];
+  late final TextEditingController _nameController;
+  late final TextEditingController _nikController;
+  late final TextEditingController _genderController;
+  late final TextEditingController _birthDateController;
 
   /// NIK adalah data sensitif, jadi disembunyikan sampai pengguna memintanya.
   bool _isNikVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: _nameText);
+    _nikController = TextEditingController(text: _nikText);
+    _genderController = TextEditingController(text: _genderText);
+    _birthDateController = TextEditingController(text: _birthDateText);
+  }
+
+  @override
+  void didUpdateWidget(covariant PersonalIdentityCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.patient != widget.patient) {
+      _nameController.text = _nameText;
+      _nikController.text = _nikText;
+      _genderController.text = _genderText;
+      _birthDateController.text = _birthDateText;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _nikController.dispose();
+    _genderController.dispose();
+    _birthDateController.dispose();
+    super.dispose();
+  }
+
+  String get _nameText => widget.patient.fullName.isNotEmpty
+      ? widget.patient.fullName
+      : _unavailable;
 
   String get _nikText {
     final String nik = widget.patient.nik;
     if (nik.isEmpty) return _unavailable;
     return _isNikVisible ? nik : _maskNik(nik);
   }
+
+  String get _genderText => _formatGender(widget.patient.gender);
+
+  String get _birthDateText => _formatBirthDate(widget.patient.birthDate);
 
   static String _maskNik(String nik) {
     if (nik.length <= 8) return nik;
@@ -64,81 +96,34 @@ class _PersonalIdentityCardState extends State<PersonalIdentityCard> {
     };
   }
 
-  /// Backend mengirim tanggal ISO seperti `"2004-01-07"`.
-  ///
-  /// Nilai asli pada model tidak diubah; pemformatan hanya terjadi di sini.
-  /// Bila formatnya tidak dikenali, nilai mentah tetap ditampilkan apa adanya.
   static String _formatBirthDate(String birthDate) {
     if (birthDate.isEmpty) return _unavailable;
 
     final DateTime? date = DateTime.tryParse(birthDate);
     if (date == null) return birthDate;
 
-    return "${date.day} ${_monthNames[date.month - 1]} ${date.year}";
+    return formatIndonesianDate(date) ?? birthDate;
   }
 
   @override
   Widget build(BuildContext context) {
-    final PatientProfile patient = widget.patient;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
 
-        //--------------------------------------------------
-        // TITLE
-        //--------------------------------------------------
-
-        Row(
-          children: [
-
-            Text(
-              "Identitas Pribadi",
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-
-            const Spacer(),
-
-            TextButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const EditProfilePage(),
-                  ),
-                );
-              },
-
-              icon: const Icon(
-                Icons.edit_outlined,
-                size: 18,
+        Text(
+          "Identitas Pribadi",
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: AppColors.primary,
+                fontWeight: FontWeight.bold,
               ),
-
-              label: const Text(
-                "Ubah",
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
         ),
 
         const SizedBox(height: 12),
 
-        //--------------------------------------------------
-        // CARD
-        //--------------------------------------------------
-
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.cardPadding),
-
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: AppRadius.cardLarge,
@@ -146,170 +131,62 @@ class _PersonalIdentityCardState extends State<PersonalIdentityCard> {
               color: AppColors.outlineVariant,
             ),
           ),
-
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
 
-              //------------------------------------------
-              // Nama
-              //------------------------------------------
-
-              Text(
-                "Nama Lengkap",
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+              SitaraTextField(
+                label: "Nama Lengkap",
+                labelIcon: Icons.badge_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                controller: _nameController,
               ),
 
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.xl),
 
-              Text(
-                patient.fullName.isNotEmpty ? patient.fullName : _unavailable,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-
-              const SizedBox(height: 22),
-
-              //------------------------------------------
-              // NIK
-              //------------------------------------------
-
-              Row(
-                children: [
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        Text(
-                          "NIK (Nomor Induk Kependudukan)",
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Text(
-                          _nikText,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ],
-                    ),
+              SitaraTextField(
+                label: "NIK (Nomor Induk Kependudukan)",
+                labelIcon: Icons.credit_card_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                controller: _nikController,
+                suffixIcon: IconButton(
+                  onPressed: widget.patient.nik.isEmpty
+                      ? null
+                      : () {
+                          setState(() {
+                            _isNikVisible = !_isNikVisible;
+                            _nikController.text = _nikText;
+                          });
+                        },
+                  icon: Icon(
+                    _isNikVisible
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    color: AppColors.textSecondary,
                   ),
-
-                  IconButton(
-                    onPressed: patient.nik.isEmpty
-                        ? null
-                        : () {
-                            setState(() {
-                              _isNikVisible = !_isNikVisible;
-                            });
-                          },
-
-                    icon: Icon(
-                      _isNikVisible
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+                ),
               ),
 
-              const SizedBox(height: 22),
+              const SizedBox(height: AppSpacing.xl),
 
-              //------------------------------------------
-              // Gender + Tanggal Lahir
-              //------------------------------------------
-
-              Row(
-                children: [
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        Text(
-                          "Jenis Kelamin",
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Text(
-                          _formatGender(patient.gender),
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-
-                        Text(
-                          "Tanggal Lahir",
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Text(
-                          _formatBirthDate(patient.birthDate),
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              SitaraTextField(
+                label: "Jenis Kelamin",
+                labelIcon: Icons.wc_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                controller: _genderController,
               ),
 
-              const SizedBox(height: 22),
+              const SizedBox(height: AppSpacing.xl),
 
-              //------------------------------------------
-              // Alamat
-              //------------------------------------------
-
-              // `address` pada PatientResponse adalah alamat tempat tinggal
-              // pasien, bukan alamat fasilitas kesehatan.
-              Text(
-                "Alamat",
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-              ),
-
-              const SizedBox(height: 6),
-
-              Text(
-                patient.address.isNotEmpty ? patient.address : _unavailable,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+              SitaraTextField(
+                label: "Tanggal Lahir",
+                labelIcon: Icons.calendar_today_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                controller: _birthDateController,
               ),
             ],
           ),

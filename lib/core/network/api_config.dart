@@ -15,7 +15,7 @@ class ApiConfig {
 
   static const String baseUrl = String.fromEnvironment(
     'SITARA_API_BASE_URL',
-    defaultValue: androidEmulatorBaseUrl,
+    defaultValue: androidEmulatorBaseUrl, 
   );
 
   static const Duration connectTimeout = Duration(seconds: 15);
@@ -29,6 +29,10 @@ class ApiEndpoints {
 
   static const String login = '/auth/login';
   static const String profile = '/auth/profile';
+
+  /// `PUT /auth/change-password`, body `current_password` dan `new_password`.
+  static const String changePassword = '/auth/change-password';
+
   static const String patientProfile = '/patients/profile';
 
   /// `GET /treatments/my`, daftar pengobatan milik pemegang token.

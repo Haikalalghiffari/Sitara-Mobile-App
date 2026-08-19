@@ -3,21 +3,16 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
+import '../../../shared/widgets/sitara_text_field.dart';
 
 import '../models/patient_profile.dart';
 
-/// Hanya Nomor Rekam Medis yang berasal dari backend (PatientResponse).
+/// Data kesehatan yang ditampilkan dari `PatientResponse`.
 ///
-/// Fasilitas Kesehatan dan Alamat Fasilitas tidak punya padanan di backend:
-/// PatientResponse, TreatmentResponse, maupun ControlScheduleResponse tidak
-/// memuat nama faskes, alamat faskes, latitude, atau longitude. PatientResponse
-/// memang punya `address`, tetapi itu alamat rumah pasien, bukan alamat
-/// fasilitas, sehingga tidak boleh dipakai di sini.
-///
-/// Dokter Penanggung Jawab ada sebagai TreatmentResponse.doctor_name, tetapi
-/// hanya dapat dijangkau lewat treatment_id yang belum bisa diperoleh pasien
-/// secara sah.
-class PersonalHealthCard extends StatelessWidget {
+/// Nomor rekam medis dan catatan klinis hanya boleh dibaca. Nama fasilitas
+/// dan alamat fasilitas tidak ada di schema backend, jadi tidak ditampilkan.
+/// Dokter penanggung jawab sengaja dihapus dari UI mobile.
+class PersonalHealthCard extends StatefulWidget {
   const PersonalHealthCard({
     super.key,
     required this.patient,
@@ -25,62 +20,46 @@ class PersonalHealthCard extends StatelessWidget {
 
   final PatientProfile patient;
 
-  Widget _buildInfoTile({
-    required BuildContext context,
-    required IconData icon,
-    required Color iconBackground,
-    required Color iconColor,
-    required String title,
-    required String value,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: iconBackground,
-              borderRadius: AppRadius.component,
-            ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 22,
-            ),
-          ),
+  @override
+  State<PersonalHealthCard> createState() => _PersonalHealthCardState();
+}
 
-          const SizedBox(width: 16),
+class _PersonalHealthCardState extends State<PersonalHealthCard> {
+  static const String _unavailable = "Belum tersedia";
 
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+  late final TextEditingController _mrnController;
+  late final TextEditingController _clinicalNoteController;
 
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                ),
+  @override
+  void initState() {
+    super.initState();
+    _mrnController = TextEditingController(text: _mrnText);
+    _clinicalNoteController = TextEditingController(text: _clinicalNoteText);
+  }
 
-                const SizedBox(height: 4),
+  @override
+  void didUpdateWidget(covariant PersonalHealthCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.patient != widget.patient) {
+      _mrnController.text = _mrnText;
+      _clinicalNoteController.text = _clinicalNoteText;
+    }
+  }
 
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    _mrnController.dispose();
+    _clinicalNoteController.dispose();
+    super.dispose();
+  }
+
+  String get _mrnText => widget.patient.medicalRecordNumber.isNotEmpty
+      ? widget.patient.medicalRecordNumber
+      : _unavailable;
+
+  String get _clinicalNoteText {
+    final String note = widget.patient.clinicalNote.trim();
+    return note.isNotEmpty ? note : _unavailable;
   }
 
   @override
@@ -88,10 +67,6 @@ class PersonalHealthCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-
-        //--------------------------------------------------
-        // TITLE
-        //--------------------------------------------------
 
         Text(
           "Informasi Kesehatan",
@@ -102,10 +77,6 @@ class PersonalHealthCard extends StatelessWidget {
         ),
 
         const SizedBox(height: 12),
-
-        //--------------------------------------------------
-        // CARD
-        //--------------------------------------------------
 
         Container(
           width: double.infinity,
@@ -120,48 +91,23 @@ class PersonalHealthCard extends StatelessWidget {
           child: Column(
             children: [
 
-              _buildInfoTile(
-                context: context,
-                icon: Icons.local_hospital_outlined,
-                iconBackground: AppColors.primaryContainer,
-                iconColor: AppColors.primary,
-                title: "Fasilitas Kesehatan",
-                value: "Belum tersedia",
+              SitaraTextField(
+                label: "Nomor Rekam Medis",
+                labelIcon: Icons.badge_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                controller: _mrnController,
               ),
 
-              const Divider(),
+              const SizedBox(height: AppSpacing.xl),
 
-              _buildInfoTile(
-                context: context,
-                icon: Icons.medical_services_outlined,
-                iconBackground: AppColors.secondaryContainer,
-                iconColor: AppColors.secondary,
-                title: "Dokter Penanggung Jawab",
-                value: "Belum tersedia",
-              ),
-
-              const Divider(),
-
-              _buildInfoTile(
-                context: context,
-                icon: Icons.badge_outlined,
-                iconBackground: AppColors.infoContainer,
-                iconColor: AppColors.info,
-                title: "Nomor Rekam Medis",
-                value: patient.medicalRecordNumber.isNotEmpty
-                    ? patient.medicalRecordNumber
-                    : "Belum tersedia",
-              ),
-
-              const Divider(),
-
-              _buildInfoTile(
-                context: context,
-                icon: Icons.location_on_outlined,
-                iconBackground: AppColors.warningContainer,
-                iconColor: AppColors.warning,
-                title: "Alamat Fasilitas",
-                value: "Belum tersedia",
+              SitaraTextField(
+                label: "Catatan Klinis",
+                labelIcon: Icons.notes_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                maxLines: 4,
+                controller: _clinicalNoteController,
               ),
             ],
           ),

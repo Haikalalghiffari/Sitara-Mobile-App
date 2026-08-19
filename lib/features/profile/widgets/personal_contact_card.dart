@@ -3,33 +3,41 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
+import '../../../shared/widgets/sitara_text_field.dart';
 
-import 'contact_tile.dart';
-
-import '../../login/models/user_profile.dart';
 import '../models/patient_profile.dart';
-import 'profile_notice.dart';
 
-class PersonalContactCard extends StatelessWidget {
+/// Kontak pasien.
+///
+/// Nomor telepon dan alamat tempat tinggal boleh diubah. Kontak PMO hanya
+/// ditampilkan. Alamat email tidak ditampilkan sesuai keputusan produk.
+class PersonalContactCard extends StatefulWidget {
   const PersonalContactCard({
     super.key,
     required this.patient,
-    required this.user,
+    required this.phoneController,
+    required this.addressController,
+    this.enabled = true,
   });
 
   final PatientProfile patient;
-  final UserProfile user;
+  final TextEditingController phoneController;
+  final TextEditingController addressController;
+  final bool enabled;
 
+  @override
+  State<PersonalContactCard> createState() => _PersonalContactCardState();
+}
+
+class _PersonalContactCardState extends State<PersonalContactCard> {
   static const String _unavailable = "Belum tersedia";
 
-  static String _orFallback(String value) =>
-      value.isNotEmpty ? value : _unavailable;
+  late final TextEditingController _pmoController;
 
-  /// Pengawas Menelan Obat berperan sebagai kontak yang dihubungi petugas,
-  /// sehingga mengisi slot kontak darurat pada desain.
+  /// Pengawas Menelan Obat berperan sebagai kontak yang dihubungi petugas.
   String get _pmoContact {
-    final String name = patient.pmoName.trim();
-    final String phone = patient.pmoPhone.trim();
+    final String name = widget.patient.pmoName.trim();
+    final String phone = widget.patient.pmoPhone.trim();
 
     if (name.isEmpty && phone.isEmpty) return _unavailable;
     if (name.isEmpty) return phone;
@@ -39,13 +47,30 @@ class PersonalContactCard extends StatelessWidget {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _pmoController = TextEditingController(text: _pmoContact);
+  }
+
+  @override
+  void didUpdateWidget(covariant PersonalContactCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.patient != widget.patient) {
+      _pmoController.text = _pmoContact;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pmoController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        //--------------------------------------------------
-        // TITLE
-        //--------------------------------------------------
 
         Text(
           "Informasi Kontak",
@@ -55,18 +80,21 @@ class PersonalContactCard extends StatelessWidget {
               ),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
 
-        //--------------------------------------------------
-        // CARD
-        //--------------------------------------------------
+        Text(
+          "Hanya nomor telepon dan alamat tempat tinggal yang dapat diubah.",
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.5,
+              ),
+        ),
+
+        const SizedBox(height: 12),
 
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.cardPadding,
-            vertical: AppSpacing.lg,
-          ),
+          padding: const EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: AppRadius.cardLarge,
@@ -76,50 +104,37 @@ class PersonalContactCard extends StatelessWidget {
           ),
           child: Column(
             children: [
-              ContactTile(
-                icon: Icons.phone_outlined,
-                iconBackground: AppColors.infoContainer,
-                iconColor: AppColors.info,
-                title: "Nomor Telepon",
-                value: _orFallback(patient.phone),
-                onTap: () => showProfileNotice(
-                  context,
-                  profileEditUnavailableMessage,
-                ),
+
+              SitaraTextField(
+                label: "Nomor Telepon",
+                labelIcon: Icons.phone_outlined,
+                hint: "08xxxxxxxxxx",
+                controller: widget.phoneController,
+                enabled: widget.enabled,
+                keyboardType: TextInputType.phone,
               ),
 
-              const Divider(
-                color: AppColors.outlineVariant,
-                height: 1,
+              const SizedBox(height: AppSpacing.xl),
+
+              SitaraTextField(
+                label: "Alamat Tempat Tinggal",
+                labelIcon: Icons.location_on_outlined,
+                hint: "Alamat tempat tinggal",
+                controller: widget.addressController,
+                enabled: widget.enabled,
+                maxLines: 3,
+                keyboardType: TextInputType.streetAddress,
+                textCapitalization: TextCapitalization.sentences,
               ),
 
-              ContactTile(
-                icon: Icons.email_outlined,
-                iconBackground: AppColors.secondaryContainer,
-                iconColor: AppColors.secondary,
-                title: "Alamat Email",
-                value: _orFallback(user.email),
-                onTap: () => showProfileNotice(
-                  context,
-                  profileEditUnavailableMessage,
-                ),
-              ),
+              const SizedBox(height: AppSpacing.xl),
 
-              const Divider(
-                color: AppColors.outlineVariant,
-                height: 1,
-              ),
-
-              ContactTile(
-                icon: Icons.emergency_outlined,
-                iconBackground: AppColors.errorContainer,
-                iconColor: AppColors.error,
-                title: "Kontak Darurat (PMO)",
-                value: _pmoContact,
-                onTap: () => showProfileNotice(
-                  context,
-                  profileEditUnavailableMessage,
-                ),
+              SitaraTextField(
+                label: "Kontak Darurat (PMO)",
+                labelIcon: Icons.emergency_outlined,
+                hint: _unavailable,
+                readOnly: true,
+                controller: _pmoController,
               ),
             ],
           ),

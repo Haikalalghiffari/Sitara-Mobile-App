@@ -39,7 +39,7 @@ class PersonalInformationHeader extends StatelessWidget {
 
             Expanded(
               child: Text(
-                "Informasi Pribadi",
+                "Informasi Diri",
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,

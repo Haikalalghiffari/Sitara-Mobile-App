@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Backend hanya menyediakan `GET /patients/profile`. Tidak ada endpoint yang
-/// memungkinkan pasien memperbarui datanya sendiri, dan tidak ada endpoint
-/// unggah foto profil, sehingga tombol ubah pada halaman profil belum punya
-/// tujuan.
+/// Backend hanya menyediakan `GET /patients/profile`. Tidak ada
+/// `PUT /patients/profile` untuk pasien. `PUT /patients/{patient_id}` adalah
+/// endpoint pembaruan rekam pasien secara umum, bukan endpoint profil pasien.
 const String profileEditUnavailableMessage =
-    'Ubah data profil belum tersedia di aplikasi. '
+    'Nomor telepon dan alamat belum dapat disimpan dari aplikasi. '
     'Hubungi petugas kesehatan untuk memperbarui data Anda.';
+
+const String profilePictureUploadUnavailableMessage =
+    'Foto profil belum dapat disimpan ke server. '
+    'Anda tetap dapat memilih foto dari kamera atau galeri.';
 
 const String profileSettingsUnavailableMessage =
     'Pengaturan pada halaman ini belum tersedia.';

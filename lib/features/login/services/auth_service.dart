@@ -99,6 +99,44 @@ class AuthService {
     }
   }
 
+  /// Mengirim `PUT /auth/change-password`.
+  ///
+  /// Backend memverifikasi `current_password` dan menolak password baru yang
+  /// sama dengan yang lama. Token sesi tetap berlaku setelah berhasil.
+  /// Pesan sukses diambil dari field `message` pada balasan server.
+  Future<String> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final Response<dynamic> response = await _apiClient.dio.put<dynamic>(
+        ApiEndpoints.changePassword,
+        data: <String, String>{
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        },
+      );
+
+      final dynamic data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException(
+          'Format balasan ubah kata sandi tidak dikenali.',
+        );
+      }
+
+      final String message = data['message']?.toString().trim() ?? '';
+      if (message.isEmpty) {
+        throw const ApiException(
+          'Format balasan ubah kata sandi tidak dikenali.',
+        );
+      }
+
+      return message;
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
   Future<void> logout() => _tokenStorage.clear();
 
   Future<bool> hasActiveSession() => _tokenStorage.hasToken();

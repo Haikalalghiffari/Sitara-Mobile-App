@@ -7,6 +7,8 @@ import '../../../core/theme/spacing.dart';
 
 import '../models/camera_status.dart';
 import '../models/verification_state.dart';
+import '../pages/register_face_page.dart';
+import '../storage/face_registration_storage.dart';
 
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/verification_action_button.dart';
@@ -46,12 +48,15 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
+  bool _awaitingRegistration = true;
+  final FaceRegistrationStorage _faceRegistrationStorage =
+      FaceRegistrationStorage();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
+    _continueAfterRegistrationCheck();
   }
 
   @override
@@ -73,9 +78,44 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
-    if (state == AppLifecycleState.resumed && controller == null) {
+    if (state == AppLifecycleState.resumed &&
+        controller == null &&
+        !_awaitingRegistration) {
       _initializeCamera();
     }
+  }
+
+  /// Guard pendaftaran wajah sebelum kamera VOT existing dijalankan.
+  ///
+  /// Status hanya dibaca dari penyimpanan lokal. Jika pasien membatalkan
+  /// daftar wajah, halaman VOT ditutup agar kembali ke Home.
+  Future<void> _continueAfterRegistrationCheck() async {
+    final bool registered = await _faceRegistrationStorage.isRegistered();
+    if (!mounted) return;
+
+    if (!registered) {
+      final bool? completed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const RegisterFacePage(),
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (completed != true) {
+        Navigator.pop(context);
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _awaitingRegistration = false;
+    });
+
+    await _initializeCamera();
   }
 
   /// Melepas controller aktif tanpa menutup halaman.
@@ -186,6 +226,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (_awaitingRegistration) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
 
