@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../../ai_vot/pages/register_face_page.dart';
 import '../../profile/widgets/profile_menu_tile.dart';
 import '../../profile/pages/personal_information_page.dart';
 import '../widgets/settings_header.dart';
 import 'change_password_page.dart';
 
-/// Pusat pengaturan akun. Tahap ini hanya UI, tanpa pemanggilan API.
+/// Pusat pengaturan akun dan keamanan pasien SITARA.
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
@@ -31,12 +32,12 @@ class SettingsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SettingsHeader(title: "Settings"),
+                  const SettingsHeader(title: 'Settings'),
 
                   const SizedBox(height: 28),
 
                   Text(
-                    "SETTINGS",
+                    'SETTINGS',
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                           color: AppColors.primary,
                           fontWeight: FontWeight.bold,
@@ -47,7 +48,7 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: 8),
 
                   Text(
-                    "Kelola kata sandi dan data diri Anda.",
+                    'Kelola verifikasi wajah, kata sandi, dan data diri Anda.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: AppColors.textSecondary,
                           height: 1.5,
@@ -57,9 +58,25 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: 28),
 
                   ProfileMenuTile(
+                    icon: Icons.face_retouching_natural_outlined,
+                    title: 'Pendaftaran Wajah',
+                    subtitle: 'Kelola status foto wajah verifikasi',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterFacePage(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  ProfileMenuTile(
                     icon: Icons.lock_outline,
-                    title: "Ubah Password",
-                    subtitle: "Perbarui kata sandi akun",
+                    title: 'Ubah Password',
+                    subtitle: 'Perbarui kata sandi akun',
                     onTap: () {
                       Navigator.push(
                         context,
@@ -74,8 +91,8 @@ class SettingsPage extends StatelessWidget {
 
                   ProfileMenuTile(
                     icon: Icons.person_outline_rounded,
-                    title: "Informasi Diri",
-                    subtitle: "Ubah informasi pribadi",
+                    title: 'Informasi Diri',
+                    subtitle: 'Ubah informasi pribadi',
                     onTap: () {
                       Navigator.push(
                         context,
