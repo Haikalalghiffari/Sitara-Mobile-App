@@ -4,33 +4,40 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
-
+import '../../login/services/auth_service.dart';
 import '../../medicine/models/my_medicine_schedule.dart';
 import '../models/camera_status.dart';
 import '../models/face_verification_result.dart';
 import '../models/verification_state.dart';
-import '../pages/medicine_verification_page.dart';
-import '../pages/register_face_page.dart';
+import '../models/video_verification_request.dart';
+import '../models/video_verification_result.dart';
+import '../services/simulated_verification_service.dart';
+import '../services/verification_service.dart';
+import '../services/video_verification_api_service.dart';
 import '../storage/face_registration_storage.dart';
-
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/verification_action_button.dart';
 import '../widgets/verification_camera_view.dart';
 import '../widgets/verification_indicator_panel.dart';
 import '../widgets/verification_info.dart';
+import 'medicine_verification_page.dart';
+import 'register_face_page.dart';
 
-/// Halaman verifikasi minum obat berbasis kamera (AI-VOT).
+/// Halaman utama alur verifikasi minum obat AI-VOT.
 ///
-/// PENTING (Phase 7 Gate Rule):
-/// AI-VOT TIDAK BOLEH dimulai sebelum Face Verification berhasil untuk
-/// jadwal obat (medicine_schedule_id) tersebut.
+/// Halaman ini berperan sebagai container utama:
+/// 1. Mengatur lifecycle kamera dan status perizinan per perangkat.
+/// 2. Memulai service verifikasi (VerificationService) saat pengguna menekan tombol.
+/// 3. Menghubungkan hasil Face Verification (ace_verification_id) ke Video Verification.
 class AiVotPage extends StatefulWidget {
   const AiVotPage({
     super.key,
+    this.verificationService,
     this.schedule,
     this.verificationResult,
   });
 
+  final VerificationService? verificationService;
   final MyMedicineSchedule? schedule;
   final FaceVerificationResult? verificationResult;
 
@@ -39,8 +46,10 @@ class AiVotPage extends StatefulWidget {
 }
 
 class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
-  final VerificationState _state = VerificationState.ready;
+  late final VerificationService _verificationService =
+      widget.verificationService ?? SimulatedVerificationService();
 
+  VerificationState _state = VerificationState.ready;
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
   bool _awaitingRegistration = true;
@@ -57,6 +66,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _verificationService.cancel();
     _cameraController?.dispose();
     _cameraController = null;
     super.dispose();
@@ -82,7 +92,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   /// SECURITY GATE: Menjamin Face Verification telah berhasil sebelum AI-VOT dimulai.
   ///
-  /// Bila belum ada erificationResult yang erified == true untuk jadwal obat ini,
+  /// Bila belum ada verificationResult yang verified == true untuk jadwal obat ini,
   /// halaman ini akan membuka MedicineVerificationPage terlebih dahulu.
   /// Jika verifikasi wajah batal atau gagal -> AI-VOT DITUTUP (STOP) dan kamera TIDAK diaktifkan.
   Future<void> _checkVerificationGate() async {
@@ -209,7 +219,70 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     };
   }
 
+  /// Mengirim record Video Verification ke backend yang meneruskan ace_verification_id.
+  Future<VideoVerificationResult?> submitVideoVerification() async {
+    final FaceVerificationResult? result = widget.verificationResult;
+    final MyMedicineSchedule? schedule = widget.schedule;
+
+    // Rule 3, 7, 10: Validation for Null/Failed Face Verification or Mismatched Schedule
+    if (result == null || !result.verified || result.faceVerificationId <= 0) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Verifikasi wajah belum tersedia. Silakan lakukan verifikasi wajah terlebih dahulu.',
+          ),
+        ),
+      );
+      return null;
+    }
+
+    if (schedule == null || schedule.id <= 0) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Jadwal minum obat tidak valid.'),
+        ),
+      );
+      return null;
+    }
+
+    final request = VideoVerificationRequest(
+      medicineScheduleId: schedule.id,
+      faceVerificationId: result.faceVerificationId,
+      verificationDate: DateTime.now().toIso8601String().split('T')[0],
+      videoPath: '/storage/videos/med__.mp4',
+      fileName: 'med_.mp4',
+      mimeType: 'video/mp4',
+      fileSize: 1024000,
+    );
+
+    try {
+      final token = await AuthService().getToken();
+      if (token != null && token.isNotEmpty) {
+        return await VideoVerificationApiService().createVideoVerification(
+          request: request,
+          token: token,
+        );
+      }
+      return null;
+    } catch (e) {
+      if (!mounted) return null;
+      final errorMessage = e.toString().replaceAll('Exception: ', '');
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengirim verifikasi video: '),
+        ),
+      );
+      return null;
+    }
+  }
+
   void _showVerificationUnavailable() {
+    submitVideoVerification();
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     messenger.hideCurrentSnackBar();
@@ -302,7 +375,12 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                     onStart: _cameraStatus.isReady
                         ? _showVerificationUnavailable
                         : null,
-                    onFinish: () => Navigator.pop(context),
+                    onFinish: () async {
+                      await submitVideoVerification();
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    },
                   ),
                   const SizedBox(height: AppSpacing.md),
                   const VerificationInfo(),

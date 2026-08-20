@@ -4,9 +4,9 @@
 /// di banyak file. Untuk menjalankan aplikasi pada perangkat fisik
 /// atau server lain, timpa nilainya saat build tanpa mengubah kode:
 ///
-/// ```
+/// `
 /// flutter run --dart-define=SITARA_API_BASE_URL=http://192.168.1.10:8000
-/// ```
+/// `
 class ApiConfig {
   const ApiConfig._();
 
@@ -30,59 +30,61 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String profile = '/auth/profile';
 
-  /// `PUT /auth/change-password`, body `current_password` dan `new_password`.
+  /// PUT /auth/change-password, body current_password dan 
+ew_password.
   static const String changePassword = '/auth/change-password';
 
   static const String patientProfile = '/patients/profile';
 
-  /// `GET /treatments/my`, daftar pengobatan milik pemegang token.
+  /// GET /treatments/my, daftar pengobatan milik pemegang token.
   static const String myTreatments = '/treatments/my';
 
-  /// `GET /medicine-schedules/my`, jadwal minum obat milik pemegang token.
+  /// GET /medicine-schedules/my, jadwal minum obat milik pemegang token.
   ///
-  /// Bukan `/medicine-schedules`, yang mengembalikan jadwal seluruh pasien dan
+  /// Bukan /medicine-schedules, yang mengembalikan jadwal seluruh pasien dan
   /// hanya dapat diakses role nakes.
   static const String myMedicineSchedules = '/medicine-schedules/my';
 
-  /// `GET /control-schedules/my`, jadwal kontrol milik pemegang token.
+  /// GET /control-schedules/my, jadwal kontrol milik pemegang token.
   ///
-  /// Bukan `/control-schedules`, yang mengembalikan jadwal seluruh pasien dan
+  /// Bukan /control-schedules, yang mengembalikan jadwal seluruh pasien dan
   /// hanya dapat diakses role nakes.
   static const String myControlSchedules = '/control-schedules/my';
 
-  /// `POST /complaints`, mengirim keluhan baru. Sejak backend memakai
-  /// `require_nakes_or_patient`, endpoint ini dapat dipakai akun pasien.
+  /// POST /complaints, mengirim keluhan baru. Sejak backend memakai
+  /// 
+equire_nakes_or_patient, endpoint ini dapat dipakai akun pasien.
   static const String complaints = '/complaints';
 
-  /// `GET /complaints/my`, riwayat keluhan milik pemegang token.
+  /// GET /complaints/my, riwayat keluhan milik pemegang token.
   ///
-  /// Bukan `/complaints`, yang mengembalikan keluhan seluruh pasien dan hanya
+  /// Bukan /complaints, yang mengembalikan keluhan seluruh pasien dan hanya
   /// dapat diakses role nakes.
   static const String myComplaints = '/complaints/my';
 
-  /// `POST /refills`, mengirim permintaan pesan ulang obat. Sejak backend
+  /// POST /refills, mengirim permintaan pesan ulang obat. Sejak backend
   /// mengizinkan role patient, endpoint ini dapat dipakai akun pasien.
   static const String refills = '/refills';
 
-  /// `GET /refills/my`, riwayat pesan ulang milik pemegang token.
+  /// GET /refills/my, riwayat pesan ulang milik pemegang token.
   ///
-  /// Bukan `/refills`, yang mengembalikan permintaan seluruh pasien dan hanya
+  /// Bukan /refills, yang mengembalikan permintaan seluruh pasien dan hanya
   /// dapat diakses role nakes.
   static const String myRefills = '/refills/my';
 
   static const String notifications = '/notifications';
 
-  /// `PUT /notifications/read-all`, menandai seluruh notifikasi milik pemegang
+  /// PUT /notifications/read-all, menandai seluruh notifikasi milik pemegang
   /// token sebagai sudah dibaca.
   static const String notificationsReadAll = '/notifications/read-all';
 
-  /// `DELETE /notifications/{notification_id}`.
+  /// DELETE /notifications/{notification_id}.
   ///
   /// Backend tidak menyediakan penghapusan massal, hanya per notifikasi.
-  static String notification(int id) => '/notifications/$id';
+  static String notification(int id) => '/notifications/';
 
-  /// `PUT /notifications/{notification_id}/read`, tanpa request body.
-  static String notificationRead(int id) => '/notifications/$id/read';
+  /// PUT /notifications/{notification_id}/read, tanpa request body.
+  static String notificationRead(int id) => '/notifications//read';
 
   /// GET /face/status, mengecek status pendaftaran wajah pasien terautentikasi.
   static const String faceStatus = '/face/status';
@@ -92,4 +94,7 @@ class ApiEndpoints {
 
   /// POST /face/verify, memverifikasi wajah pasien sebelum sesi AI-VOT.
   static const String faceVerify = '/face/verify';
+
+  /// POST /video-verifications, membuat record verifikasi video minum obat.
+  static const String videoVerifications = '/video-verifications';
 }
