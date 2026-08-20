@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 
-import '../../ai_vot/pages/ai_vot_page.dart';
+import '../../ai_vot/pages/medicine_verification_page.dart';
+import '../../medicine/models/my_medicine_schedule.dart';
 
 class HomeVerificationSection extends StatelessWidget {
-  const HomeVerificationSection({super.key});
+  const HomeVerificationSection({
+    super.key,
+    this.schedule,
+  });
+
+  final MyMedicineSchedule? schedule;
 
   @override
   Widget build(BuildContext context) {
@@ -62,12 +68,22 @@ class HomeVerificationSection extends StatelessWidget {
             height: 52,
             child: ElevatedButton.icon(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AiVotPage(),
-                  ),
-                );
+                if (schedule != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MedicineVerificationPage(schedule: schedule!),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Pilih obat aktif terlebih dahulu untuk memverifikasi wajah.',
+                      ),
+                    ),
+                  );
+                }
               },
               icon: const Icon(Icons.camera_alt_outlined),
               label: const Text("Buka Kamera"),

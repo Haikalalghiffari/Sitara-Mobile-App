@@ -5,8 +5,11 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../../medicine/models/my_medicine_schedule.dart';
 import '../models/camera_status.dart';
+import '../models/face_verification_result.dart';
 import '../models/verification_state.dart';
+import '../pages/medicine_verification_page.dart';
 import '../pages/register_face_page.dart';
 import '../storage/face_registration_storage.dart';
 
@@ -18,32 +21,24 @@ import '../widgets/verification_info.dart';
 
 /// Halaman verifikasi minum obat berbasis kamera (AI-VOT).
 ///
-/// Halaman ini diakses dari Dashboard melalui tombol verifikasi minum obat,
-/// bukan sebagai halaman utama.
+/// PENTING (Phase 7 Gate Rule):
+/// AI-VOT TIDAK BOLEH dimulai sebelum Face Verification berhasil untuk
+/// jadwal obat (medicine_schedule_id) tersebut.
 class AiVotPage extends StatefulWidget {
-  const AiVotPage({super.key});
+  const AiVotPage({
+    super.key,
+    this.schedule,
+    this.verificationResult,
+  });
+
+  final MyMedicineSchedule? schedule;
+  final FaceVerificationResult? verificationResult;
 
   @override
   State<AiVotPage> createState() => _AiVotPageState();
 }
 
 class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
-  /// Selalu [VerificationState.ready] karena tidak ada pipeline verifikasi
-  /// yang dijalankan.
-  ///
-  /// SimulatedVerificationService sengaja tidak dipakai lagi: alur itu selalu
-  /// berakhir pada VerificationState.success setelah jeda waktu, sehingga
-  /// pasien diberi tahu dosisnya "sudah terverifikasi" padahal tidak ada
-  /// deteksi apa pun dan tidak ada data yang terkirim. Berkasnya tetap ada di
-  /// services/simulated_verification_service.dart.
-  ///
-  // TODO: Jalankan pipeline verifikasi sebenarnya setelah dua hal tersedia.
-  // Pertama, model AI on-device sesuai kontrak di ai_detection_service.dart.
-  // Kedua, jalur pengiriman hasil ke backend: saat ini POST
-  // /video-verifications hanya menerima application/json berisi
-  // medicine_schedule_id, video_path, file_name, mime_type, dan file_size —
-  // tidak ada endpoint multipart untuk mengunggah berkas videonya, dan
-  // medicine_schedule_id tidak dapat diperoleh pasien secara sah.
   final VerificationState _state = VerificationState.ready;
 
   CameraController? _cameraController;
@@ -56,7 +51,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _continueAfterRegistrationCheck();
+    _checkVerificationGate();
   }
 
   @override
@@ -85,11 +80,42 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
   }
 
-  /// Guard pendaftaran wajah sebelum kamera VOT existing dijalankan.
+  /// SECURITY GATE: Menjamin Face Verification telah berhasil sebelum AI-VOT dimulai.
   ///
-  /// Status hanya dibaca dari penyimpanan lokal. Jika pasien membatalkan
-  /// daftar wajah, halaman VOT ditutup agar kembali ke Home.
-  Future<void> _continueAfterRegistrationCheck() async {
+  /// Bila belum ada erificationResult yang erified == true untuk jadwal obat ini,
+  /// halaman ini akan membuka MedicineVerificationPage terlebih dahulu.
+  /// Jika verifikasi wajah batal atau gagal -> AI-VOT DITUTUP (STOP) dan kamera TIDAK diaktifkan.
+  Future<void> _checkVerificationGate() async {
+    final FaceVerificationResult? result = widget.verificationResult;
+    final MyMedicineSchedule? schedule = widget.schedule;
+
+    // Pengecekan Keamanan Sesi Verifikasi Wajah
+    if (result == null || !result.verified || result.faceVerificationId <= 0) {
+      if (!mounted) return;
+
+      if (schedule != null) {
+        final dynamic verifyResult = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MedicineVerificationPage(schedule: schedule),
+          ),
+        );
+
+        if (!mounted) return;
+
+        if (verifyResult is! FaceVerificationResult || !verifyResult.verified) {
+          // Gate Batal / Gagal -> KELUAR dan STOP. AI-VOT TIDAK BOLEH DIMULAI.
+          Navigator.pop(context);
+          return;
+        }
+      } else {
+        // Tidak ada jadwal obat & belum terverifikasi -> KELUAR dan STOP.
+        Navigator.pop(context);
+        return;
+      }
+    }
+
+    // Pengecekan pendaftaran wajah perangkat
     final bool registered = await _faceRegistrationStorage.isRegistered();
     if (!mounted) return;
 
@@ -142,7 +168,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
 
-      // Verifikasi minum obat memakai kamera depan bila tersedia.
       final selectedCamera = cameras.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.front,
         orElse: () => cameras.first,
@@ -176,16 +201,14 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   CameraStatus _mapCameraException(CameraException exception) {
     return switch (exception.code) {
-      "CameraAccessDenied" ||
-      "CameraAccessDeniedWithoutPrompt" ||
-      "CameraAccessRestricted" =>
+      'CameraAccessDenied' ||
+      'CameraAccessDeniedWithoutPrompt' ||
+      'CameraAccessRestricted' =>
         CameraStatus.permissionDenied,
       _ => CameraStatus.unavailable,
     };
   }
 
-  /// Kamera tetap berfungsi, tetapi hasilnya belum bisa diverifikasi maupun
-  /// dikirim, sehingga pasien diberi keterangan apa adanya.
   void _showVerificationUnavailable() {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
@@ -193,8 +216,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     messenger.showSnackBar(
       const SnackBar(
         content: Text(
-          "Verifikasi minum obat belum dapat diproses melalui aplikasi. "
-          "Perlihatkan proses minum obat kepada petugas kesehatan.",
+          'Verifikasi minum obat belum dapat diproses melalui aplikasi. '
+          'Perlihatkan proses minum obat kepada petugas kesehatan.',
         ),
       ),
     );
@@ -206,17 +229,21 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: AppRadius.card),
-          title: const Text("Cara Verifikasi"),
+          title: const Text('Cara Verifikasi'),
           content: const Text(
-            "1. Posisikan wajah dan tangan di dalam bingkai kamera.\n"
-            "2. Perlihatkan obat pada area yang tersedia.\n"
-            "3. Tekan Mulai Verifikasi, lalu minum obat seperti biasa.\n\n"
-            "Pastikan ruangan cukup terang agar proses berjalan lancar.",
+            '1. Posisikan wajah dan tangan di dalam bingkai kamera.
+'
+            '2. Perlihatkan obat pada area yang tersedia.
+'
+            '3. Tekan Mulai Verifikasi, lalu minum obat seperti biasa.
+
+'
+            'Pastikan ruangan cukup terang agar proses berjalan lancar.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text("Mengerti"),
+              child: const Text('Mengerti'),
             ),
           ],
         );
@@ -239,29 +266,26 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(
               maxWidth: AppSpacing.contentMaxWidth,
             ),
-
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.screenHorizontal,
               ),
-
               child: Column(
                 children: [
                   AiVotTopBar(
-                    title: "AI-VOT Verifikasi",
+                    title: widget.schedule != null
+                        ? 'AI-VOT: '
+                        : 'AI-VOT Verifikasi',
                     onBack: () => Navigator.pop(context),
                     onHelp: _showHelp,
                   ),
-
                   const SizedBox(height: AppSpacing.lg),
-
                   Expanded(
                     child: VerificationCameraView(
                       state: _state,
@@ -270,13 +294,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                       onRetryCamera: _initializeCamera,
                     ),
                   ),
-
                   const SizedBox(height: AppSpacing.lg),
-
                   VerificationIndicatorPanel(state: _state),
-
                   const SizedBox(height: AppSpacing.lg),
-
                   VerificationActionButton(
                     state: _state,
                     onStart: _cameraStatus.isReady
@@ -284,11 +304,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                         : null,
                     onFinish: () => Navigator.pop(context),
                   ),
-
                   const SizedBox(height: AppSpacing.md),
-
                   const VerificationInfo(),
-
                   const SizedBox(height: AppSpacing.lg),
                 ],
               ),

@@ -272,7 +272,7 @@ class _HomePageState extends State<HomePage> {
 
                             const SizedBox(height: 28),
 
-                            const HomeVerificationSection(),
+                            HomeVerificationSection(schedule: _nextDrinkSchedule),
 
                             const SizedBox(height: 28),
 

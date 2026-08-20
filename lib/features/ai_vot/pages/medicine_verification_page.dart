@@ -12,6 +12,7 @@ import '../models/camera_status.dart';
 import '../models/face_verification_result.dart';
 import '../models/face_verification_state.dart';
 import '../services/face_verification_api_service.dart';
+import 'ai_vot_page.dart';
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/register_face_camera_frame.dart';
 
@@ -526,7 +527,17 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
           width: double.infinity,
           height: AppSpacing.buttonHeight + 4,
           child: FilledButton(
-            onPressed: () => Navigator.pop(context, _result),
+            onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AiVotPage(
+                  schedule: widget.schedule,
+                  verificationResult: _result,
+                ),
+              ),
+            );
+          },
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -535,7 +546,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
               ),
             ),
             child: const Text(
-              'Selesai',
+              'Lanjut ke AI-VOT',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -660,7 +671,17 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
         ),
         const SizedBox(height: AppSpacing.md),
         OutlinedButton(
-          onPressed: () => Navigator.pop(context, _result),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AiVotPage(
+                  schedule: widget.schedule,
+                  verificationResult: _result,
+                ),
+              ),
+            );
+          },
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, AppSpacing.buttonHeight),
             side: const BorderSide(color: AppColors.outlineVariant),
