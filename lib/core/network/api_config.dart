@@ -90,4 +90,6 @@ class ApiEndpoints {
   /// POST /face/register, mendaftarkan wajah pasien (multipart image).
   static const String faceRegister = '/face/register';
 
+  /// POST /face/verify, memverifikasi wajah pasien sebelum sesi AI-VOT.
+  static const String faceVerify = '/face/verify';
 }

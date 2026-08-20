@@ -4,6 +4,7 @@
 /// mengirim id jadwal, satuan obat, maupun jumlah dosis per hari.
 class MyMedicineSchedule {
   const MyMedicineSchedule({
+    this.id = 0,
     required this.treatmentId,
     required this.medicineId,
     required this.medicineName,
@@ -13,6 +14,7 @@ class MyMedicineSchedule {
     required this.drinkTime,
   });
 
+  final int id;
   final int treatmentId;
 
   /// Dipakai POST /refills, bukan untuk ditampilkan sebagai nama obat.
@@ -34,6 +36,7 @@ class MyMedicineSchedule {
 
   factory MyMedicineSchedule.fromJson(Map<String, dynamic> json) {
     return MyMedicineSchedule(
+      id: (json['id'] as num?)?.toInt() ?? 0,
       treatmentId: (json['treatment_id'] as num?)?.toInt() ?? 0,
       medicineId: (json['medicine_id'] as num?)?.toInt() ?? 0,
       medicineName: json['medicine_name']?.toString() ?? '',
