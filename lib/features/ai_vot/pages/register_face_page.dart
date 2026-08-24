@@ -3,11 +3,15 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
+import '../../login/pages/login_page.dart';
+import '../../login/services/auth_service.dart';
 import '../models/camera_status.dart';
-import '../storage/face_registration_storage.dart';
+import '../models/face_register_result.dart';
+import '../services/face_service.dart';
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/register_face_camera_frame.dart';
 
@@ -17,9 +21,9 @@ enum _RegisterFaceStep {
   success,
 }
 
-/// Pendaftaran wajah di perangkat, sebelum Video Verification.
+/// Pendaftaran wajah ke backend `POST /face/register`.
 ///
-/// Tidak mengirim foto ke server. Backend register wajah belum tersedia.
+/// Sukses hanya ditampilkan bila server mengembalikan `status: success`.
 class RegisterFacePage extends StatefulWidget {
   const RegisterFacePage({super.key});
 
@@ -29,12 +33,14 @@ class RegisterFacePage extends StatefulWidget {
 
 class _RegisterFacePageState extends State<RegisterFacePage>
     with WidgetsBindingObserver {
-  final FaceRegistrationStorage _storage = FaceRegistrationStorage();
+  final FaceService _faceService = FaceService();
+  final AuthService _authService = AuthService();
 
   _RegisterFaceStep _step = _RegisterFaceStep.capture;
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
   String? _capturedPath;
+  String? _successMessage;
   bool _isCapturing = false;
   bool _isSaving = false;
 
@@ -135,10 +141,28 @@ class _RegisterFacePageState extends State<RegisterFacePage>
     };
   }
 
-  void _showMessage(String message) {
+  Future<void> _handleExpiredSession() async {
+    await _authService.logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
+      ),
+      (route) => false,
+    );
+  }
+
+  void _showMessage(String message, {Color? backgroundColor}) {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: backgroundColor,
+        content: Text(message),
+      ),
+    );
   }
 
   Future<void> _deleteCapturedFile() async {
@@ -202,23 +226,43 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   Future<void> _save() async {
     if (_isSaving) return;
 
+    final String? path = _capturedPath;
+    if (path == null || path.isEmpty) {
+      _showMessage("Foto wajah belum tersedia. Silakan ambil ulang.");
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
-      await _storage.markRegistered();
+      final FaceRegisterResult result = await _faceService.registerFace(
+        imagePath: path,
+      );
+
       await _deleteCapturedFile();
 
       if (!mounted) return;
 
       setState(() {
         _capturedPath = null;
+        _successMessage = result.message;
         _step = _RegisterFaceStep.success;
         _isSaving = false;
       });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() => _isSaving = false);
+      _showMessage(error.message);
     } catch (_) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      _showMessage("Status pendaftaran tidak dapat disimpan di perangkat.");
+      _showMessage(ApiException.unexpectedMessage);
     }
   }
 
@@ -265,7 +309,11 @@ class _RegisterFacePageState extends State<RegisterFacePage>
                   Expanded(
                     child: SingleChildScrollView(
                       child: _step == _RegisterFaceStep.success
-                          ? _SuccessBody(onContinue: _continueToVerification)
+                          ? _SuccessBody(
+                              message: _successMessage ??
+                                  "Wajah pasien berhasil didaftarkan.",
+                              onContinue: _continueToVerification,
+                            )
                           : _CaptureBody(
                               step: _step,
                               cameraStatus: _cameraStatus,
@@ -424,8 +472,12 @@ class _CaptureBody extends StatelessWidget {
 }
 
 class _SuccessBody extends StatelessWidget {
-  const _SuccessBody({required this.onContinue});
+  const _SuccessBody({
+    required this.message,
+    required this.onContinue,
+  });
 
+  final String message;
   final VoidCallback onContinue;
 
   @override
@@ -448,20 +500,11 @@ class _SuccessBody extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xl),
         Text(
-          "Wajah berhasil didaftarkan pada perangkat.",
+          message,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
-              ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Text(
-          "Pendaftaran ini hanya tersimpan di perangkat. Belum ada pengiriman ke server.",
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.5,
               ),
         ),
         const SizedBox(height: AppSpacing.xxl),

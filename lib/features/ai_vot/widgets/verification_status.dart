@@ -10,7 +10,8 @@ import '../models/verification_state.dart';
 Color verificationStatusColor(VerificationState state) {
   return switch (state) {
     VerificationState.ready => AppColors.primaryLight,
-    VerificationState.success => AppColors.success,
+    VerificationState.faceVerified || VerificationState.success =>
+      AppColors.success,
     VerificationState.failed => AppColors.error,
     _ => AppColors.warning,
   };

@@ -83,4 +83,13 @@ class ApiEndpoints {
 
   /// `PUT /notifications/{notification_id}/read`, tanpa request body.
   static String notificationRead(int id) => '/notifications/$id/read';
+
+  /// `POST /face/register`, multipart field `image`.
+  static const String faceRegister = '/face/register';
+
+  /// `POST /face/verify`, multipart field `image` dan form `medicine_schedule_id`.
+  static const String faceVerify = '/face/verify';
+
+  /// `GET /face/status`, status pendaftaran wajah pemegang token.
+  static const String faceStatus = '/face/status';
 }

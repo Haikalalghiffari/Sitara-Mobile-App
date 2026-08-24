@@ -29,7 +29,7 @@ class VerificationActionButton extends StatelessWidget {
           Icons.camera_alt_rounded,
           onStart,
         ),
-      VerificationState.success => (
+      VerificationState.faceVerified || VerificationState.success => (
           "Selesai",
           Icons.check_rounded,
           onFinish,

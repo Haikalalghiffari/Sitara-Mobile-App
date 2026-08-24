@@ -38,7 +38,7 @@ class VerificationInfo extends StatelessWidget {
         const SizedBox(height: AppSpacing.xs),
 
         Text(
-          "Model AI belum terhubung dan hasil verifikasi belum dapat dikirim ke petugas.",
+          "Verifikasi wajah dikirim ke server. Deteksi obat belum tersedia.",
           textAlign: TextAlign.center,
           style: theme.textTheme.labelSmall?.copyWith(
             color: AppColors.textDisabled,

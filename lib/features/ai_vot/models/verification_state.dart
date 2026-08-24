@@ -3,15 +3,16 @@ const int kVerificationStepCount = 4;
 
 /// State UI halaman AI-VOT Verifikasi.
 ///
-/// Untuk sementara state ini digerakkan oleh simulasi. Ketika model AI
-/// sudah terhubung, urutan state yang sama akan dihasilkan oleh pipeline
-/// deteksi sebenarnya sehingga UI tidak perlu diubah.
+/// Tahap ini hanya memverifikasi wajah lewat `POST /face/verify`.
+/// Deteksi obat belum dihubungkan, jadi [faceVerified] bukan keberhasilan
+/// sesi minum obat secara keseluruhan.
 enum VerificationState {
   ready,
   detectingFace,
   detectingMedicine,
   analyzingPose,
   verifying,
+  faceVerified,
   success,
   failed,
 }
@@ -20,10 +21,11 @@ extension VerificationStateX on VerificationState {
   /// Teks status singkat yang tampil pada pill di area kamera.
   String get statusLabel => switch (this) {
         VerificationState.ready => "Sistem siap",
-        VerificationState.detectingFace => "Mendeteksi wajah...",
+        VerificationState.detectingFace => "Memverifikasi wajah...",
         VerificationState.detectingMedicine => "Mendeteksi obat...",
         VerificationState.analyzingPose => "Menganalisis posisi...",
         VerificationState.verifying => "Memverifikasi minum obat...",
+        VerificationState.faceVerified => "Wajah terverifikasi",
         VerificationState.success => "Verifikasi berhasil",
         VerificationState.failed => "Verifikasi belum berhasil",
       };
@@ -32,10 +34,12 @@ extension VerificationStateX on VerificationState {
   String get instruction => switch (this) {
         VerificationState.ready =>
           "Posisikan wajah dan tangan di dalam kamera",
-        VerificationState.detectingFace => "Tetap arahkan wajah ke kamera",
+        VerificationState.detectingFace => "Mohon tunggu, wajah sedang dicocokkan",
         VerificationState.detectingMedicine => "Perlihatkan obat ke kamera",
         VerificationState.analyzingPose => "Dekatkan obat ke arah mulut",
         VerificationState.verifying => "Mohon tunggu sebentar",
+        VerificationState.faceVerified =>
+          "Wajah terverifikasi. Deteksi obat belum tersedia",
         VerificationState.success => "Terima kasih, verifikasi selesai",
         VerificationState.failed => "Silakan ulangi verifikasi",
       };
@@ -57,6 +61,7 @@ extension VerificationStateX on VerificationState {
   int get activeStepCount => switch (this) {
         VerificationState.ready ||
         VerificationState.failed ||
+        VerificationState.faceVerified ||
         VerificationState.detectingFace =>
           1,
         VerificationState.detectingMedicine => 2,

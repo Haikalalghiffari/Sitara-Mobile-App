@@ -1,14 +1,22 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../../login/pages/login_page.dart';
+import '../../login/services/auth_service.dart';
+
 import '../models/camera_status.dart';
+import '../models/face_status.dart';
+import '../models/face_verify_result.dart';
 import '../models/verification_state.dart';
 import '../pages/register_face_page.dart';
-import '../storage/face_registration_storage.dart';
+import '../services/face_service.dart';
 
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/verification_action_button.dart';
@@ -28,29 +36,19 @@ class AiVotPage extends StatefulWidget {
 }
 
 class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
-  /// Selalu [VerificationState.ready] karena tidak ada pipeline verifikasi
-  /// yang dijalankan.
-  ///
-  /// SimulatedVerificationService sengaja tidak dipakai lagi: alur itu selalu
-  /// berakhir pada VerificationState.success setelah jeda waktu, sehingga
-  /// pasien diberi tahu dosisnya "sudah terverifikasi" padahal tidak ada
-  /// deteksi apa pun dan tidak ada data yang terkirim. Berkasnya tetap ada di
-  /// services/simulated_verification_service.dart.
-  ///
-  // TODO: Jalankan pipeline verifikasi sebenarnya setelah dua hal tersedia.
-  // Pertama, model AI on-device sesuai kontrak di ai_detection_service.dart.
-  // Kedua, jalur pengiriman hasil ke backend: saat ini POST
-  // /video-verifications hanya menerima application/json berisi
-  // medicine_schedule_id, video_path, file_name, mime_type, dan file_size —
-  // tidak ada endpoint multipart untuk mengunggah berkas videonya, dan
-  // medicine_schedule_id tidak dapat diperoleh pasien secara sah.
-  final VerificationState _state = VerificationState.ready;
+  /// Hanya wajah yang diverifikasi di tahap ini. [VerificationState.success]
+  /// sengaja tidak dipakai karena panel akan menandai Obat dan Keaslian
+  /// selesai, padahal deteksi obat belum tersedia.
+  VerificationState _state = VerificationState.ready;
 
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
   bool _awaitingRegistration = true;
-  final FaceRegistrationStorage _faceRegistrationStorage =
-      FaceRegistrationStorage();
+  bool _isSubmitting = false;
+  String? _statusError;
+  String? _feedbackMessage;
+  final FaceService _faceService = FaceService();
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -87,35 +85,82 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   /// Guard pendaftaran wajah sebelum kamera VOT existing dijalankan.
   ///
-  /// Status hanya dibaca dari penyimpanan lokal. Jika pasien membatalkan
+  /// Sumber kebenaran adalah `GET /face/status`. Jika pasien membatalkan
   /// daftar wajah, halaman VOT ditutup agar kembali ke Home.
   Future<void> _continueAfterRegistrationCheck() async {
-    final bool registered = await _faceRegistrationStorage.isRegistered();
-    if (!mounted) return;
+    setState(() {
+      _awaitingRegistration = true;
+      _statusError = null;
+    });
 
-    if (!registered) {
-      final bool? completed = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const RegisterFacePage(),
-        ),
-      );
+    try {
+      final FaceStatus status = await _faceService.getStatus();
+      if (!mounted) return;
+
+      if (!status.isRegistered) {
+        final bool? completed = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const RegisterFacePage(),
+          ),
+        );
+
+        if (!mounted) return;
+
+        if (completed != true) {
+          Navigator.pop(context);
+          return;
+        }
+
+        final FaceStatus refreshed = await _faceService.getStatus();
+        if (!mounted) return;
+
+        if (!refreshed.isRegistered) {
+          setState(() {
+            _statusError =
+                "Pendaftaran wajah belum tercatat di server. Silakan coba lagi.";
+          });
+          return;
+        }
+      }
 
       if (!mounted) return;
 
-      if (completed != true) {
-        Navigator.pop(context);
+      setState(() {
+        _awaitingRegistration = false;
+      });
+
+      await _initializeCamera();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
         return;
       }
-    }
 
+      setState(() {
+        _statusError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _statusError = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
+  Future<void> _handleExpiredSession() async {
+    await _authService.logout();
     if (!mounted) return;
 
-    setState(() {
-      _awaitingRegistration = false;
-    });
-
-    await _initializeCamera();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LoginPage(),
+      ),
+      (route) => false,
+    );
   }
 
   /// Melepas controller aktif tanpa menutup halaman.
@@ -184,20 +229,153 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     };
   }
 
-  /// Kamera tetap berfungsi, tetapi hasilnya belum bisa diverifikasi maupun
-  /// dikirim, sehingga pasien diberi keterangan apa adanya.
-  void _showVerificationUnavailable() {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+  /// Satu kali tekan: ambil satu foto, kirim `POST /face/verify`, tunggu hasil.
+  ///
+  /// Tidak ada streaming frame. Bila gagal, pasien menekan Coba Lagi.
+  Future<void> _startFaceVerification() async {
+    if (_isSubmitting) return;
 
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text(
-          "Verifikasi minum obat belum dapat diproses melalui aplikasi. "
-          "Perlihatkan proses minum obat kepada petugas kesehatan.",
-        ),
-      ),
-    );
+    if (!_cameraStatus.isReady) {
+      setState(() {
+        _feedbackMessage = _cameraStatus == CameraStatus.permissionDenied
+            ? "Izin kamera diperlukan untuk verifikasi wajah."
+            : "Kamera belum siap. Silakan coba lagi.";
+      });
+      return;
+    }
+
+    final CameraController? controller = _cameraController;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        controller.value.isTakingPicture) {
+      setState(() {
+        _feedbackMessage = "Kamera belum siap. Silakan coba lagi.";
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _feedbackMessage = null;
+      _state = VerificationState.detectingFace;
+    });
+
+    String? capturedPath;
+
+    try {
+      final int medicineScheduleId =
+          await _faceService.resolveMedicineScheduleId();
+
+      if (!mounted) return;
+
+      final CameraController? liveController = _cameraController;
+      if (liveController == null ||
+          !liveController.value.isInitialized ||
+          liveController.value.isTakingPicture) {
+        setState(() {
+          _state = VerificationState.ready;
+          _feedbackMessage = "Kamera belum siap. Silakan coba lagi.";
+          _isSubmitting = false;
+        });
+        return;
+      }
+
+      final XFile photo = await liveController.takePicture();
+      capturedPath = photo.path;
+
+      if (!mounted) return;
+
+      final FaceVerifyResult result = await _faceService.verifyFace(
+        imagePath: capturedPath,
+        medicineScheduleId: medicineScheduleId,
+      );
+
+      if (!mounted) return;
+
+      if (result.verified) {
+        setState(() {
+          _state = VerificationState.faceVerified;
+          _feedbackMessage = result.message.isNotEmpty
+              ? result.message
+              : "Wajah cocok dengan data pasien terdaftar.";
+          _isSubmitting = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _state = VerificationState.failed;
+        _feedbackMessage = _mismatchMessage(result);
+        _isSubmitting = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      if (capturedPath == null) {
+        setState(() {
+          _state = VerificationState.ready;
+          _feedbackMessage = error.message;
+          _isSubmitting = false;
+        });
+        return;
+      }
+
+      _setFailed(error.message);
+    } on CameraException {
+      if (!mounted) return;
+      setState(() {
+        _state = VerificationState.ready;
+        _feedbackMessage = "Foto tidak dapat diambil. Silakan coba lagi.";
+        _isSubmitting = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      if (capturedPath == null) {
+        setState(() {
+          _state = VerificationState.ready;
+          _feedbackMessage = ApiException.unexpectedMessage;
+          _isSubmitting = false;
+        });
+        return;
+      }
+      _setFailed(ApiException.unexpectedMessage);
+    } finally {
+      await _deleteTempFile(capturedPath);
+    }
+  }
+
+  void _setFailed(String message) {
+    setState(() {
+      _state = VerificationState.failed;
+      _feedbackMessage = message;
+      _isSubmitting = false;
+    });
+  }
+
+  String _mismatchMessage(FaceVerifyResult result) {
+    final String base = result.message.isNotEmpty
+        ? result.message
+        : "Wajah tidak cocok dengan pasien terdaftar.";
+    return "$base "
+        "(kemiripan ${result.similarityScore.toStringAsFixed(2)}, "
+        "ambang ${result.threshold.toStringAsFixed(2)}).";
+  }
+
+  Future<void> _deleteTempFile(String? path) async {
+    if (path == null || path.isEmpty) return;
+    try {
+      final File file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Berkas sementara; kegagalan hapus tidak mengubah alur.
+    }
   }
 
   void _showHelp() {
@@ -227,11 +405,43 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_awaitingRegistration) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
           child: Center(
-            child: CircularProgressIndicator(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenHorizontal,
+              ),
+              child: _statusError == null
+                  ? const CircularProgressIndicator()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _statusError!,
+                          textAlign: TextAlign.center,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        OutlinedButton.icon(
+                          onPressed: _continueAfterRegistrationCheck,
+                          icon: const Icon(Icons.refresh, size: 20),
+                          label: const Text("Coba Lagi"),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AppRadius.button,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
       );
@@ -275,12 +485,28 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
                   VerificationIndicatorPanel(state: _state),
 
+                  if (_feedbackMessage != null) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      _feedbackMessage!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: _state == VerificationState.failed
+                                ? AppColors.error
+                                : AppColors.textSecondary,
+                          ),
+                    ),
+                  ],
+
                   const SizedBox(height: AppSpacing.lg),
 
                   VerificationActionButton(
                     state: _state,
-                    onStart: _cameraStatus.isReady
-                        ? _showVerificationUnavailable
+                    onStart: _cameraStatus.isReady && !_isSubmitting
+                        ? _startFaceVerification
+                        : null,
+                    onRetry: _cameraStatus.isReady && !_isSubmitting
+                        ? _startFaceVerification
                         : null,
                     onFinish: () => Navigator.pop(context),
                   ),
