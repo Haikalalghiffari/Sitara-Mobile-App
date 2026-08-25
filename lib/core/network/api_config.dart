@@ -30,6 +30,9 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String profile = '/auth/profile';
 
+  /// `POST /auth/activate`, body `token` dan `new_password`. Tanpa Bearer.
+  static const String activate = '/auth/activate';
+
   /// `PUT /auth/change-password`, body `current_password` dan `new_password`.
   static const String changePassword = '/auth/change-password';
 

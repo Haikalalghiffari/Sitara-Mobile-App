@@ -137,6 +137,66 @@ class AuthService {
     }
   }
 
+  /// Mengirim `POST /auth/activate`. Endpoint ini publik, tanpa Bearer.
+  ///
+  /// Sukses hanya jika server mengembalikan `message`. Tidak ada login otomatis.
+  Future<String> activateAccount({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      final Response<dynamic> response = await _apiClient.dio.post<dynamic>(
+        ApiEndpoints.activate,
+        data: <String, String>{
+          'token': token,
+          'new_password': newPassword,
+        },
+        options: ApiClient.noAuthOptions(),
+      );
+
+      final dynamic data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException(
+          'Format balasan aktivasi akun tidak dikenali.',
+        );
+      }
+
+      final String message = data['message']?.toString().trim() ?? '';
+      if (message.isEmpty) {
+        throw const ApiException(
+          'Format balasan aktivasi akun tidak dikenali.',
+        );
+      }
+
+      return message;
+    } on DioException catch (error) {
+      throw _mapActivationError(ApiException.fromDioException(error));
+    }
+  }
+
+  static ApiException _mapActivationError(ApiException error) {
+    final String lower = error.message.toLowerCase();
+
+    if (error.statusCode == 410 ||
+        lower.contains('kedaluwarsa') ||
+        lower.contains('tidak valid')) {
+      return ApiException(
+        'Link aktivasi tidak valid atau sudah kedaluwarsa.',
+        statusCode: error.statusCode,
+      );
+    }
+
+    if (lower.contains('sudah diaktivasi') ||
+        lower.contains('sudah digunakan')) {
+      return const ApiException(
+        'Akun ini sudah pernah diaktifkan.',
+        statusCode: 400,
+      );
+    }
+
+    return error;
+  }
+
   Future<void> logout() => _tokenStorage.clear();
 
   Future<bool> hasActiveSession() => _tokenStorage.hasToken();
