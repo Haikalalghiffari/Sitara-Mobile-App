@@ -44,6 +44,8 @@ dependencies:
   dio: ^5.11.0
   flutter_secure_storage: 9.2.4
   app_links: ^6.4.1
+  mediapipe_face_mesh: ^2.8.0
+  hand_landmarker: ^3.0.1
 
 dev_dependencies:
   flutter_test:

@@ -1,71 +1,70 @@
 /// Jumlah tahap yang ditampilkan pada step indicator kamera.
 const int kVerificationStepCount = 4;
 
-/// State UI halaman AI-VOT Verifikasi.
-///
-/// Tahap ini hanya memverifikasi wajah lewat `POST /face/verify`.
-/// Deteksi obat belum dihubungkan, jadi [faceVerified] bukan keberhasilan
-/// sesi minum obat secara keseluruhan.
+/// State UI halaman AI-VOT. Satu halaman, tanpa klaim obat tertelan di server.
 enum VerificationState {
   ready,
-  detectingFace,
-  detectingMedicine,
-  analyzingPose,
-  verifying,
+  starting,
+  faceVerifying,
   faceVerified,
-  success,
-  failed,
+  medicineDetecting,
+  medicineMatched,
+  drinking,
+  completed,
 }
 
 extension VerificationStateX on VerificationState {
-  /// Teks status singkat yang tampil pada pill di area kamera.
   String get statusLabel => switch (this) {
         VerificationState.ready => "Sistem siap",
-        VerificationState.detectingFace => "Memverifikasi wajah...",
-        VerificationState.detectingMedicine => "Mendeteksi obat...",
-        VerificationState.analyzingPose => "Menganalisis posisi...",
-        VerificationState.verifying => "Memverifikasi minum obat...",
+        VerificationState.starting => "Menyiapkan sesi...",
+        VerificationState.faceVerifying => "Memverifikasi wajah...",
         VerificationState.faceVerified => "Wajah terverifikasi",
-        VerificationState.success => "Verifikasi berhasil",
-        VerificationState.failed => "Verifikasi belum berhasil",
+        VerificationState.medicineDetecting => "Mendeteksi obat...",
+        VerificationState.medicineMatched => "Obat sesuai",
+        VerificationState.drinking => "Verifikasi visual proses minum",
+        VerificationState.completed => "Proses minum terdeteksi",
       };
 
-  /// Instruksi utama untuk pasien.
   String get instruction => switch (this) {
         VerificationState.ready =>
-          "Posisikan wajah dan tangan di dalam kamera",
-        VerificationState.detectingFace => "Mohon tunggu, wajah sedang dicocokkan",
-        VerificationState.detectingMedicine => "Perlihatkan obat ke kamera",
-        VerificationState.analyzingPose => "Dekatkan obat ke arah mulut",
-        VerificationState.verifying => "Mohon tunggu sebentar",
-        VerificationState.faceVerified =>
-          "Wajah terverifikasi. Deteksi obat belum tersedia",
-        VerificationState.success => "Terima kasih, verifikasi selesai",
-        VerificationState.failed => "Silakan ulangi verifikasi",
+          "Posisikan wajah di dalam kamera, lalu mulai verifikasi",
+        VerificationState.starting => "Menyiapkan sesi verifikasi",
+        VerificationState.faceVerifying =>
+          "Mohon tunggu, wajah sedang dicocokkan",
+        VerificationState.faceVerified => "Wajah terverifikasi. Siapkan obat",
+        VerificationState.medicineDetecting =>
+          "Letakkan obat di dalam kotak",
+        VerificationState.medicineMatched => "Obat sesuai jadwal",
+        VerificationState.drinking =>
+          "Minum obat seperti biasa di depan kamera",
+        VerificationState.completed =>
+          "Proses minum terdeteksi. Hasil belum disimpan di server.",
       };
 
-  /// Penjelasan singkat ketika verifikasi belum berhasil.
-  String get failureReason =>
-      "Wajah, obat, atau gerakan minum obat belum terlihat jelas.";
-
   bool get isProcessing => switch (this) {
-        VerificationState.detectingFace ||
-        VerificationState.detectingMedicine ||
-        VerificationState.analyzingPose ||
-        VerificationState.verifying =>
+        VerificationState.starting ||
+        VerificationState.faceVerifying ||
+        VerificationState.medicineDetecting ||
+        VerificationState.drinking =>
           true,
         _ => false,
       };
 
-  /// Jumlah titik yang menyala pada step indicator.
+  bool get showsMedicineGuide =>
+      this == VerificationState.medicineDetecting ||
+      this == VerificationState.medicineMatched;
+
   int get activeStepCount => switch (this) {
         VerificationState.ready ||
-        VerificationState.failed ||
-        VerificationState.faceVerified ||
-        VerificationState.detectingFace =>
+        VerificationState.starting ||
+        VerificationState.faceVerifying =>
           1,
-        VerificationState.detectingMedicine => 2,
-        VerificationState.analyzingPose => 3,
-        VerificationState.verifying || VerificationState.success => 4,
+        VerificationState.faceVerified ||
+        VerificationState.medicineDetecting =>
+          2,
+        VerificationState.medicineMatched ||
+        VerificationState.drinking =>
+          3,
+        VerificationState.completed => 4,
       };
 }

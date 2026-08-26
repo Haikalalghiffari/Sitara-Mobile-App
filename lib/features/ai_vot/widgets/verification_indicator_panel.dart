@@ -5,12 +5,8 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 import '../models/verification_state.dart';
 
-/// Status tiap komponen pemeriksaan.
-enum _IndicatorStatus { pending, active, done, failed }
+enum _IndicatorStatus { pending, active, done }
 
-/// Panel putih berisi indikator Wajah, Obat, dan Keaslian.
-///
-/// Status di sini mengikuti state UI, bukan hasil deteksi AI.
 class VerificationIndicatorPanel extends StatelessWidget {
   const VerificationIndicatorPanel({super.key, required this.state});
 
@@ -36,7 +32,7 @@ class VerificationIndicatorPanel extends StatelessWidget {
               icon: Icons.face_retouching_natural_outlined,
               label: "Wajah",
               status: _faceStatus(state),
-              caption: _faceCaption(state),
+              caption: _caption(_faceStatus(state)),
             ),
           ),
           Expanded(
@@ -44,15 +40,15 @@ class VerificationIndicatorPanel extends StatelessWidget {
               icon: Icons.medication_outlined,
               label: "Obat",
               status: _medicineStatus(state),
-              caption: _medicineCaption(state),
+              caption: _caption(_medicineStatus(state)),
             ),
           ),
           Expanded(
             child: _IndicatorItem(
-              icon: Icons.verified_user_outlined,
-              label: "Keaslian",
-              status: _authenticityStatus(state),
-              caption: _authenticityCaption(state),
+              icon: Icons.local_drink_outlined,
+              label: "Minum",
+              status: _drinkStatus(state),
+              caption: _caption(_drinkStatus(state)),
             ),
           ),
         ],
@@ -60,79 +56,48 @@ class VerificationIndicatorPanel extends StatelessWidget {
     );
   }
 
-  static _IndicatorStatus _faceStatus(VerificationState state) {
-    return switch (state) {
-      VerificationState.ready => _IndicatorStatus.pending,
-      VerificationState.detectingFace => _IndicatorStatus.active,
-      VerificationState.failed => _IndicatorStatus.failed,
-      VerificationState.faceVerified ||
-      VerificationState.detectingMedicine ||
-      VerificationState.analyzingPose ||
-      VerificationState.verifying ||
-      VerificationState.success =>
-        _IndicatorStatus.done,
+  static String _caption(_IndicatorStatus status) {
+    return switch (status) {
+      _IndicatorStatus.pending => "Menunggu",
+      _IndicatorStatus.active => "Proses",
+      _IndicatorStatus.done => "Berhasil",
     };
   }
 
-  static String _faceCaption(VerificationState state) {
+  static _IndicatorStatus _faceStatus(VerificationState state) {
     return switch (state) {
-      VerificationState.detectingFace => "Memeriksa",
-      VerificationState.failed => "Tidak cocok",
+      VerificationState.ready || VerificationState.starting =>
+        _IndicatorStatus.pending,
+      VerificationState.faceVerifying => _IndicatorStatus.active,
       VerificationState.faceVerified ||
-      VerificationState.detectingMedicine ||
-      VerificationState.analyzingPose ||
-      VerificationState.verifying ||
-      VerificationState.success =>
-        "Terverifikasi",
-      VerificationState.ready => "Menunggu",
+      VerificationState.medicineDetecting ||
+      VerificationState.medicineMatched ||
+      VerificationState.drinking ||
+      VerificationState.completed =>
+        _IndicatorStatus.done,
     };
   }
 
   static _IndicatorStatus _medicineStatus(VerificationState state) {
     return switch (state) {
       VerificationState.ready ||
-      VerificationState.failed ||
-      VerificationState.detectingFace ||
+      VerificationState.starting ||
+      VerificationState.faceVerifying ||
       VerificationState.faceVerified =>
         _IndicatorStatus.pending,
-      VerificationState.detectingMedicine => _IndicatorStatus.active,
-      VerificationState.analyzingPose ||
-      VerificationState.verifying ||
-      VerificationState.success =>
+      VerificationState.medicineDetecting => _IndicatorStatus.active,
+      VerificationState.medicineMatched ||
+      VerificationState.drinking ||
+      VerificationState.completed =>
         _IndicatorStatus.done,
     };
   }
 
-  static String _medicineCaption(VerificationState state) {
-    return switch (_medicineStatus(state)) {
-      _IndicatorStatus.pending => "Menunggu",
-      _IndicatorStatus.active => "Memeriksa",
-      _IndicatorStatus.done => "Selesai",
-      _IndicatorStatus.failed => "Gagal",
-    };
-  }
-
-  static _IndicatorStatus _authenticityStatus(VerificationState state) {
+  static _IndicatorStatus _drinkStatus(VerificationState state) {
     return switch (state) {
-      VerificationState.ready ||
-      VerificationState.failed ||
-      VerificationState.detectingFace ||
-      VerificationState.detectingMedicine ||
-      VerificationState.faceVerified =>
-        _IndicatorStatus.pending,
-      VerificationState.analyzingPose ||
-      VerificationState.verifying =>
-        _IndicatorStatus.active,
-      VerificationState.success => _IndicatorStatus.done,
-    };
-  }
-
-  static String _authenticityCaption(VerificationState state) {
-    return switch (_authenticityStatus(state)) {
-      _IndicatorStatus.pending => "Menunggu",
-      _IndicatorStatus.active => "Memeriksa",
-      _IndicatorStatus.done => "Selesai",
-      _IndicatorStatus.failed => "Gagal",
+      VerificationState.drinking => _IndicatorStatus.active,
+      VerificationState.completed => _IndicatorStatus.done,
+      _ => _IndicatorStatus.pending,
     };
   }
 }
@@ -165,10 +130,6 @@ class _IndicatorItem extends StatelessWidget {
           AppColors.successContainer,
           AppColors.success,
         ),
-      _IndicatorStatus.failed => (
-          AppColors.errorContainer,
-          AppColors.error,
-        ),
     };
 
     return Column(
@@ -183,27 +144,19 @@ class _IndicatorItem extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           child: Icon(
-            switch (status) {
-              _IndicatorStatus.done => Icons.check_rounded,
-              _IndicatorStatus.failed => Icons.close_rounded,
-              _ => icon,
-            },
+            status == _IndicatorStatus.done ? Icons.check_rounded : icon,
             size: AppSpacing.iconMd,
             color: foreground,
           ),
         ),
-
         const SizedBox(height: AppSpacing.sm),
-
         Text(
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
         ),
-
         const SizedBox(height: 2),
-
         Text(
           caption,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(

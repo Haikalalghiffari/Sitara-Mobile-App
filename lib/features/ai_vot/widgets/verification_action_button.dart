@@ -5,48 +5,40 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 import '../models/verification_state.dart';
 
-/// Tombol utama halaman AI-VOT. Label dan aksinya mengikuti state.
 class VerificationActionButton extends StatelessWidget {
   const VerificationActionButton({
     super.key,
     required this.state,
+    this.isBusy = false,
+    this.hasPhaseError = false,
     this.onStart,
-    this.onRetry,
+    this.onRetryFace,
+    this.onDetectMedicine,
+    this.onRetryMedicine,
+    this.onRetryDrinking,
     this.onFinish,
   });
 
   final VerificationState state;
+  final bool isBusy;
+  final bool hasPhaseError;
   final VoidCallback? onStart;
-  final VoidCallback? onRetry;
+  final VoidCallback? onRetryFace;
+  final VoidCallback? onDetectMedicine;
+  final VoidCallback? onRetryMedicine;
+  final VoidCallback? onRetryDrinking;
   final VoidCallback? onFinish;
 
   @override
   Widget build(BuildContext context) {
     final (String label, IconData? icon, VoidCallback? onPressed) =
-        switch (state) {
-      VerificationState.ready => (
-          "Mulai Verifikasi",
-          Icons.camera_alt_rounded,
-          onStart,
-        ),
-      VerificationState.faceVerified || VerificationState.success => (
-          "Selesai",
-          Icons.check_rounded,
-          onFinish,
-        ),
-      VerificationState.failed => (
-          "Coba Lagi",
-          Icons.refresh_rounded,
-          onRetry,
-        ),
-      _ => (state.statusLabel, null, null),
-    };
+        _resolve();
 
     return SizedBox(
       width: double.infinity,
       height: AppSpacing.buttonHeight + AppSpacing.xs,
       child: FilledButton(
-        onPressed: onPressed,
+        onPressed: isBusy ? null : onPressed,
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
@@ -61,9 +53,7 @@ class VerificationActionButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (icon != null)
-              Icon(icon, size: AppSpacing.iconMd)
-            else
+            if (isBusy || icon == null)
               const SizedBox(
                 width: AppSpacing.iconMd,
                 height: AppSpacing.iconMd,
@@ -71,13 +61,13 @@ class VerificationActionButton extends StatelessWidget {
                   strokeWidth: 2,
                   color: Colors.white,
                 ),
-              ),
-
+              )
+            else
+              Icon(icon, size: AppSpacing.iconMd),
             const SizedBox(width: AppSpacing.sm + AppSpacing.xs),
-
             Flexible(
               child: Text(
-                label,
+                isBusy ? state.statusLabel : label,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -85,5 +75,34 @@ class VerificationActionButton extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  (String, IconData?, VoidCallback?) _resolve() {
+    return switch (state) {
+      VerificationState.ready => (
+          "Mulai Verifikasi",
+          Icons.camera_alt_rounded,
+          onStart,
+        ),
+      VerificationState.faceVerifying => hasPhaseError
+          ? ("Coba Lagi", Icons.refresh_rounded, onRetryFace)
+          : (state.statusLabel, null, null),
+      VerificationState.medicineDetecting => hasPhaseError
+          ? ("Coba Lagi", Icons.refresh_rounded, onRetryMedicine)
+          : (
+              "Deteksi Obat",
+              Icons.medication_outlined,
+              onDetectMedicine,
+            ),
+      VerificationState.drinking => hasPhaseError
+          ? ("Coba Lagi", Icons.refresh_rounded, onRetryDrinking)
+          : (state.statusLabel, null, null),
+      VerificationState.completed => (
+          "Selesai",
+          Icons.check_rounded,
+          onFinish,
+        ),
+      _ => (state.statusLabel, null, null),
+    };
   }
 }

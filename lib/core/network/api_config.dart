@@ -95,4 +95,20 @@ class ApiEndpoints {
 
   /// `GET /face/status`, status pendaftaran wajah pemegang token.
   static const String faceStatus = '/face/status';
+
+  /// `GET /medications/today`, daily medication milik pemegang token hari ini.
+  static const String medicationsToday = '/medications/today';
+
+  /// `POST /vot/start`, body JSON `medicine_schedule_id`.
+  static const String votStart = '/vot/start';
+
+  /// `POST /vot/face-verify`, multipart `daily_medication_id` + `image`.
+  static const String votFaceVerify = '/vot/face-verify';
+
+  /// `POST /vot/medicine-detect`, multipart `daily_medication_id` + `image`.
+  static const String votMedicineDetect = '/vot/medicine-detect';
+
+  /// `GET /vot/{daily_medication_id}`.
+  static String votSession(int dailyMedicationId) =>
+      '/vot/$dailyMedicationId';
 }
