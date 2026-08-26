@@ -25,6 +25,7 @@ import '../services/local_drinking_service.dart';
 import '../services/vot_service.dart';
 import '../utils/drinking_sequence.dart';
 import '../utils/today_medication_picker.dart';
+import '../utils/vot_completion_guard.dart';
 import '../utils/vot_flow.dart';
 
 import '../widgets/ai_vot_top_bar.dart';
@@ -63,6 +64,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
   final LocalDrinkingService _drinkingService = LocalDrinkingService();
   final DrinkingSequenceMachine _drinkingMachine = DrinkingSequenceMachine();
+  final VotCompletionGuard _completionGuard = VotCompletionGuard();
 
   @override
   void initState() {
@@ -202,12 +204,32 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _syncSessionOnResume() async {
     final int? id = _dailyMedicationId;
     if (id == null) return;
+    if (_completionGuard.inFlight) return;
+    if (_state == VerificationState.completed) return;
 
     try {
       final DailyMedication session = await _votService.getSession(id);
       if (!mounted) return;
 
-      if (_state == VerificationState.completed) return;
+      if (VotFlow.isServerVerified(
+        status: session.status,
+        votStep: session.votStep,
+      )) {
+        _completionGuard.markSuccess();
+        setState(() {
+          _selected = session;
+          _state = VerificationState.completed;
+          _feedbackMessage = "Verifikasi minum obat berhasil.";
+          _phaseError = false;
+          _isBusy = false;
+        });
+        return;
+      }
+
+      if (_state == VerificationState.completing) {
+        setState(() => _selected = session);
+        return;
+      }
 
       setState(() {
         _selected = session;
@@ -327,8 +349,21 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       if (!mounted) return;
 
       _dailyMedicationId = started.dailyMedicationId;
+      if (_dailyMedicationId == null || _dailyMedicationId! <= 0) {
+        setState(() {
+          _state = VerificationState.ready;
+          _isBusy = false;
+          _phaseError = true;
+          _feedbackMessage =
+              "Server tidak mengirim daily_medication_id. Sesi VOT tidak dapat dilanjutkan.";
+        });
+        return;
+      }
       final VerificationState next =
           VotFlow.afterStart(votStep: started.votStep);
+      if (next == VerificationState.completed) {
+        _completionGuard.markSuccess();
+      }
 
       setState(() {
         _state = next;
@@ -364,7 +399,16 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   Future<void> _captureAndVerifyFace() async {
     final int? dailyId = _dailyMedicationId;
-    if (dailyId == null || _isBusy) return;
+    if (_isBusy) return;
+    if (dailyId == null || dailyId <= 0) {
+      setState(() {
+        _state = VerificationState.faceVerifying;
+        _phaseError = true;
+        _feedbackMessage =
+            "ID sesi VOT tidak tersedia. Tidak dapat memverifikasi wajah.";
+      });
+      return;
+    }
 
     final CameraController? controller = _cameraController;
     if (controller == null ||
@@ -455,7 +499,16 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   Future<void> _captureAndDetectMedicine() async {
     final int? dailyId = _dailyMedicationId;
-    if (dailyId == null || _isBusy) return;
+    if (_isBusy) return;
+    if (dailyId == null || dailyId <= 0) {
+      setState(() {
+        _state = VerificationState.medicineDetecting;
+        _phaseError = true;
+        _feedbackMessage =
+            "ID sesi VOT tidak tersedia. Tidak dapat mendeteksi obat.";
+      });
+      return;
+    }
 
     final CameraController? controller = _cameraController;
     if (controller == null ||
@@ -619,16 +672,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     );
 
     if (stage == DrinkingStage.completed) {
-      _stopImageStream();
-      _drinkingService.dispose();
-      if (!mounted) return;
-      setState(() {
-        _state = VerificationState.completed;
-        _feedbackMessage =
-            "Proses minum terdeteksi. Hasil belum disimpan di server.";
-        _isBusy = false;
-        _phaseError = false;
-      });
+      _completeAfterDrinking();
       return;
     }
 
@@ -639,10 +683,136 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       DrinkingStage.approachingMouth => "Mendekati mulut...",
       DrinkingStage.nearMouth => "Tahan sebentar dekat mulut.",
       DrinkingStage.withdrawing => "Jauhkan tangan dari mulut.",
-      DrinkingStage.completed => "Proses minum terdeteksi.",
+      DrinkingStage.completed => "Memverifikasi proses minum...",
     };
     if (_feedbackMessage != hint) {
       setState(() => _feedbackMessage = hint);
+    }
+  }
+
+  Future<void> _completeAfterDrinking() async {
+    if (!_completionGuard.tryBegin()) return;
+
+    await _stopImageStream();
+    await _drinkingService.dispose();
+
+    final Map<String, Object>? body =
+        VotFlow.completeRequestBody(_dailyMedicationId);
+    if (body == null) {
+      _completionGuard.markFailure();
+      if (!mounted) return;
+      setState(() {
+        _state = VerificationState.completing;
+        _phaseError = true;
+        _isBusy = false;
+        _feedbackMessage =
+            "ID sesi VOT tidak tersedia. Tidak dapat menyelesaikan verifikasi.";
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _state = VotFlow.afterLocalDrinkingCompleted();
+      _isBusy = true;
+      _phaseError = false;
+      _feedbackMessage = "Memverifikasi proses minum...";
+    });
+
+    await _submitCompleteRequest();
+  }
+
+  Future<void> _retryComplete() async {
+    if (!_completionGuard.tryBegin()) return;
+
+    final Map<String, Object>? body =
+        VotFlow.completeRequestBody(_dailyMedicationId);
+    if (body == null) {
+      _completionGuard.markFailure();
+      if (!mounted) return;
+      setState(() {
+        _state = VerificationState.completing;
+        _phaseError = true;
+        _isBusy = false;
+        _feedbackMessage =
+            "ID sesi VOT tidak tersedia. Tidak dapat menyelesaikan verifikasi.";
+      });
+      return;
+    }
+
+    setState(() {
+      _state = VerificationState.completing;
+      _isBusy = true;
+      _phaseError = false;
+      _feedbackMessage = "Memverifikasi proses minum...";
+    });
+
+    await _submitCompleteRequest();
+  }
+
+  Future<void> _submitCompleteRequest() async {
+    final int? dailyId = _dailyMedicationId;
+    if (dailyId == null || dailyId <= 0) {
+      _completionGuard.markFailure();
+      if (!mounted) return;
+      setState(() {
+        _state = VerificationState.completing;
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage =
+            "ID sesi VOT tidak tersedia. Tidak dapat menyelesaikan verifikasi.";
+      });
+      return;
+    }
+
+    try {
+      final result = await _votService.complete(dailyMedicationId: dailyId);
+      if (!mounted) return;
+
+      if (result.isFinalSuccess) {
+        _completionGuard.markSuccess();
+        setState(() {
+          _state = VerificationState.completed;
+          _isBusy = false;
+          _phaseError = false;
+          _feedbackMessage = result.message.isNotEmpty
+              ? result.message
+              : "Verifikasi minum obat berhasil.";
+        });
+        return;
+      }
+
+      _completionGuard.markFailure();
+      setState(() {
+        _state = VerificationState.completing;
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = result.message.isNotEmpty
+            ? result.message
+            : "Verifikasi minum belum disimpan. Silakan coba lagi.";
+      });
+    } on ApiException catch (error) {
+      _completionGuard.markFailure();
+      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+      setState(() {
+        _state = VerificationState.completing;
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = error.message;
+      });
+    } catch (_) {
+      _completionGuard.markFailure();
+      if (!mounted) return;
+      setState(() {
+        _state = VerificationState.completing;
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = ApiException.unexpectedMessage;
+      });
     }
   }
 
@@ -703,7 +873,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
             "1. Tekan Mulai Verifikasi, lalu posisikan wajah di kamera.\n"
             "2. Letakkan obat di dalam kotak, lalu tekan Deteksi Obat.\n"
             "3. Minum obat seperti biasa di depan kamera.\n\n"
-            "Proses minum dinilai di perangkat. Belum ada penyimpanan selesai di server.",
+            "Setelah gerakan minum terdeteksi, hasil dikirim ke server.",
           ),
           actions: [
             TextButton(
@@ -867,6 +1037,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                     onRetryMedicine:
                         canAct ? _captureAndDetectMedicine : null,
                     onRetryDrinking: canAct ? _beginDrinking : null,
+                    onRetryComplete: !_isBusy ? _retryComplete : null,
                     onFinish: () => Navigator.pop(context),
                   ),
                   const SizedBox(height: AppSpacing.md),

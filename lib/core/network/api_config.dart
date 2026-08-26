@@ -108,6 +108,9 @@ class ApiEndpoints {
   /// `POST /vot/medicine-detect`, multipart `daily_medication_id` + `image`.
   static const String votMedicineDetect = '/vot/medicine-detect';
 
+  /// `POST /vot/complete`, body JSON `daily_medication_id` + `drinking_verified`.
+  static const String votComplete = '/vot/complete';
+
   /// `GET /vot/{daily_medication_id}`.
   static String votSession(int dailyMedicationId) =>
       '/vot/$dailyMedicationId';

@@ -6,7 +6,7 @@ import 'package:sitara/features/ai_vot/models/verification_state.dart';
 import 'package:sitara/features/ai_vot/utils/vot_flow.dart';
 
 void main() {
-  test('parses POST /vot/start', () {
+  test('parses POST /vot/start and keeps daily_medication_id distinct', () {
     final VotStartResponse result = VotStartResponse.fromJson(<String, dynamic>{
       'daily_medication_id': 1,
       'medicine_schedule_id': 4,
@@ -16,6 +16,8 @@ void main() {
       'scheduled_time': '20:00:00',
     });
     expect(result.dailyMedicationId, 1);
+    expect(result.medicineScheduleId, 4);
+    expect(result.dailyMedicationId, isNot(result.medicineScheduleId));
     expect(result.votStep, 'waiting');
   });
 

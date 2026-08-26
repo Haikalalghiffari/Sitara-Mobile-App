@@ -73,6 +73,7 @@ class VerificationIndicatorPanel extends StatelessWidget {
       VerificationState.medicineDetecting ||
       VerificationState.medicineMatched ||
       VerificationState.drinking ||
+      VerificationState.completing ||
       VerificationState.completed =>
         _IndicatorStatus.done,
     };
@@ -88,6 +89,7 @@ class VerificationIndicatorPanel extends StatelessWidget {
       VerificationState.medicineDetecting => _IndicatorStatus.active,
       VerificationState.medicineMatched ||
       VerificationState.drinking ||
+      VerificationState.completing ||
       VerificationState.completed =>
         _IndicatorStatus.done,
     };
@@ -95,7 +97,8 @@ class VerificationIndicatorPanel extends StatelessWidget {
 
   static _IndicatorStatus _drinkStatus(VerificationState state) {
     return switch (state) {
-      VerificationState.drinking => _IndicatorStatus.active,
+      VerificationState.drinking || VerificationState.completing =>
+        _IndicatorStatus.active,
       VerificationState.completed => _IndicatorStatus.done,
       _ => _IndicatorStatus.pending,
     };

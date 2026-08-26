@@ -16,6 +16,7 @@ class VerificationActionButton extends StatelessWidget {
     this.onDetectMedicine,
     this.onRetryMedicine,
     this.onRetryDrinking,
+    this.onRetryComplete,
     this.onFinish,
   });
 
@@ -27,6 +28,7 @@ class VerificationActionButton extends StatelessWidget {
   final VoidCallback? onDetectMedicine;
   final VoidCallback? onRetryMedicine;
   final VoidCallback? onRetryDrinking;
+  final VoidCallback? onRetryComplete;
   final VoidCallback? onFinish;
 
   @override
@@ -96,6 +98,9 @@ class VerificationActionButton extends StatelessWidget {
             ),
       VerificationState.drinking => hasPhaseError
           ? ("Coba Lagi", Icons.refresh_rounded, onRetryDrinking)
+          : (state.statusLabel, null, null),
+      VerificationState.completing => hasPhaseError
+          ? ("Coba Lagi", Icons.refresh_rounded, onRetryComplete)
           : (state.statusLabel, null, null),
       VerificationState.completed => (
           "Selesai",

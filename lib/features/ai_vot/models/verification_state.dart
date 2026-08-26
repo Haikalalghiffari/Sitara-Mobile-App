@@ -1,7 +1,7 @@
 /// Jumlah tahap yang ditampilkan pada step indicator kamera.
 const int kVerificationStepCount = 4;
 
-/// State UI halaman AI-VOT. Satu halaman, tanpa klaim obat tertelan di server.
+/// State UI halaman AI-VOT.
 enum VerificationState {
   ready,
   starting,
@@ -10,6 +10,7 @@ enum VerificationState {
   medicineDetecting,
   medicineMatched,
   drinking,
+  completing,
   completed,
 }
 
@@ -22,7 +23,8 @@ extension VerificationStateX on VerificationState {
         VerificationState.medicineDetecting => "Mendeteksi obat...",
         VerificationState.medicineMatched => "Obat sesuai",
         VerificationState.drinking => "Verifikasi visual proses minum",
-        VerificationState.completed => "Proses minum terdeteksi",
+        VerificationState.completing => "Memverifikasi proses minum...",
+        VerificationState.completed => "Verifikasi minum obat berhasil",
       };
 
   String get instruction => switch (this) {
@@ -37,15 +39,16 @@ extension VerificationStateX on VerificationState {
         VerificationState.medicineMatched => "Obat sesuai jadwal",
         VerificationState.drinking =>
           "Minum obat seperti biasa di depan kamera",
-        VerificationState.completed =>
-          "Proses minum terdeteksi. Hasil belum disimpan di server.",
+        VerificationState.completing => "Memverifikasi proses minum...",
+        VerificationState.completed => "Verifikasi minum obat berhasil.",
       };
 
   bool get isProcessing => switch (this) {
         VerificationState.starting ||
         VerificationState.faceVerifying ||
         VerificationState.medicineDetecting ||
-        VerificationState.drinking =>
+        VerificationState.drinking ||
+        VerificationState.completing =>
           true,
         _ => false,
       };
@@ -63,7 +66,8 @@ extension VerificationStateX on VerificationState {
         VerificationState.medicineDetecting =>
           2,
         VerificationState.medicineMatched ||
-        VerificationState.drinking =>
+        VerificationState.drinking ||
+        VerificationState.completing =>
           3,
         VerificationState.completed => 4,
       };

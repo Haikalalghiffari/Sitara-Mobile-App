@@ -4,9 +4,11 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/api_exception.dart';
 import '../models/daily_medication.dart';
+import '../models/vot_complete_response.dart';
 import '../models/vot_face_verify_result.dart';
 import '../models/vot_medicine_detect_result.dart';
 import '../models/vot_start_response.dart';
+import '../utils/vot_flow.dart';
 
 /// Akses API VOT. Memakai [ApiClient] yang sama; Bearer dipasang interceptor.
 class VotService {
@@ -152,6 +154,36 @@ class VotService {
     }
   }
 
+  /// `POST /vot/complete`. Sukses UI hanya jika [VotCompleteResponse.isFinalSuccess].
+  Future<VotCompleteResponse> complete({
+    required int dailyMedicationId,
+  }) async {
+    final Map<String, Object>? body =
+        VotFlow.completeRequestBody(dailyMedicationId);
+    if (body == null) {
+      throw const ApiException(
+        'ID sesi VOT tidak tersedia. Tidak dapat menyelesaikan verifikasi.',
+      );
+    }
+
+    try {
+      final Response<dynamic> response = await _apiClient.dio.post<dynamic>(
+        ApiEndpoints.votComplete,
+        data: body,
+      );
+
+      return _parseComplete(response.data);
+    } on ApiException {
+      rethrow;
+    } on FormatException {
+      throw const ApiException(
+        'Format balasan penyelesaian VOT tidak dikenali.',
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
   VotStartResponse _parseStart(dynamic data) {
     if (data is! Map) {
       throw const ApiException('Format balasan mulai VOT tidak dikenali.');
@@ -175,6 +207,15 @@ class VotService {
       );
     }
     return VotMedicineDetectResult.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  VotCompleteResponse _parseComplete(dynamic data) {
+    if (data is! Map) {
+      throw const ApiException(
+        'Format balasan penyelesaian VOT tidak dikenali.',
+      );
+    }
+    return VotCompleteResponse.fromJson(Map<String, dynamic>.from(data));
   }
 
   static String _fileName(String path) {

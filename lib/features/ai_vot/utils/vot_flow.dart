@@ -28,4 +28,31 @@ class VotFlow {
   static VerificationState afterSession({required String votStep}) {
     return afterStart(votStep: votStep);
   }
+
+  /// MediaPipe COMPLETED lokal → COMPLETING, bukan final COMPLETED.
+  static VerificationState afterLocalDrinkingCompleted() {
+    return VerificationState.completing;
+  }
+
+  static bool isServerVerified({
+    required String status,
+    required String votStep,
+  }) {
+    return status == 'verified' && votStep == 'verified';
+  }
+
+  /// Body `POST /vot/complete`. Null jika ID sesi tidak ada — jangan request.
+  static Map<String, Object>? completeRequestBody(int? dailyMedicationId) {
+    if (dailyMedicationId == null || dailyMedicationId <= 0) return null;
+    return <String, Object>{
+      'daily_medication_id': dailyMedicationId,
+      'drinking_verified': true,
+    };
+  }
+
+  static VerificationState afterComplete({required bool serverVerified}) {
+    return serverVerified
+        ? VerificationState.completed
+        : VerificationState.completing;
+  }
 }
