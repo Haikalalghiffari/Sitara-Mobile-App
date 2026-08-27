@@ -11,13 +11,19 @@ import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 import '../../home/pages/home_page.dart';
 import '../../progress/pages/progress_page.dart';
 import '../../medicine/pages/medicine_page.dart';
+import '../../medicine/pages/medicine_refill_page.dart';
 import '../../profile/pages/profile_page.dart';
+import '../../report/pages/report_page.dart';
+import '../../ai_vot/pages/ai_vot_page.dart';
 
 import '../../login/pages/login_page.dart';
 import '../../login/services/auth_service.dart';
 
 import '../models/notification_model.dart';
 import '../services/notification_service.dart';
+import '../utils/notification_filter.dart';
+import '../utils/notification_read_ux.dart';
+import '../utils/notification_tap.dart';
 
 import '../widgets/notification_header.dart';
 import '../widgets/notification_filter_tabs.dart';
@@ -38,33 +44,18 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  static const String _allFilter = "Semua";
-
-  /// Label pada pill filter dipetakan ke nilai `type` yang benar-benar dipakai
-  /// backend (`NotificationType`). Nilai null berarti tanpa penyaringan.
-  ///
-  /// Kategori "Pesan" dan "Progres" pada desain awal tidak dipertahankan karena
-  /// backend tidak memiliki tipe notifikasi yang setara, sehingga pill-nya tidak
-  /// akan pernah cocok dengan data apa pun.
-  static const Map<String, String?> _filters = <String, String?>{
-    _allFilter: null,
-    "Obat": "medicine",
-    "Kontrol": "control",
-    "Keluhan": "complaint",
-    "Refill": "refill",
-    "Verifikasi": "video",
-  };
-
   final NotificationService _notificationService = NotificationService();
   final AuthService _authService = AuthService();
 
   List<NotificationModel> _notifications = <NotificationModel>[];
-  String _selectedFilter = _allFilter;
+  NotificationCategoryFilter _selectedFilter = NotificationCategoryFilter.all;
 
   bool _isLoading = true;
-
-  /// Menahan aksi tulis agar tidak ada dua permintaan yang saling menimpa.
   bool _isBusy = false;
+  /// Terpisah dari [_isLoading]: flag UI mulai `true` agar spinner tampil
+  /// pada frame pertama, tetapi tidak boleh memblokir fetch awal.
+  bool _isFetching = false;
+  final NotificationReadLock _readLock = NotificationReadLock();
 
   String? _errorMessage;
 
@@ -85,39 +76,55 @@ class _NotificationPageState extends State<NotificationPage> {
   /// [silent] dipakai oleh pull-to-refresh dan penyegaran setelah aksi tulis,
   /// karena indikatornya sudah ditampilkan di tempat lain.
   Future<void> _load({bool silent = false}) async {
-    setState(() {
-      if (!silent) _isLoading = true;
-      _errorMessage = null;
-    });
+    if (NotificationReadUx.skipDuplicateFetch(inFlight: _isFetching)) {
+      return;
+    }
+    _isFetching = true;
+
+    // Jangan setState di sini pada fetch awal: [_isLoading] sudah true dari
+    // initState, dan setState sinkron sebelum await tidak diizinkan.
+    if (!silent && !_isLoading && mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
+      debugPrint('[Notification] fetch start');
+
       final int userId = _userId ?? (await _authService.getProfile()).id;
 
+      debugPrint('[Notification] GET /notifications');
       final List<NotificationModel> notifications =
           await _notificationService.getNotifications();
+      debugPrint('[Notification] response received');
 
       if (!mounted) return;
 
-      // Backend seharusnya hanya mengirim notifikasi milik pemegang token.
-      // Bila ternyata ada milik pengguna lain, daftar tidak ditampilkan sama
-      // sekali: menyaringnya di aplikasi akan menutupi masalah kebocoran data
-      // di server.
       if (notifications.any((item) => item.userId != userId)) {
         setState(() {
-          _isLoading = false;
-          _notifications = <NotificationModel>[];
-          _errorMessage = "Notifikasi tidak dapat ditampilkan karena server "
-              "mengirim data milik pengguna lain.";
+          if (_notifications.isEmpty) {
+            _errorMessage = "Notifikasi tidak dapat ditampilkan karena server "
+                "mengirim data milik pengguna lain.";
+          }
         });
+        if (_notifications.isNotEmpty) {
+          _showMessage(
+            "Notifikasi tidak dapat ditampilkan karena server "
+            "mengirim data milik pengguna lain.",
+          );
+        }
         return;
       }
 
       setState(() {
         _userId = userId;
         _notifications = _sortedByNewest(notifications);
-        _isLoading = false;
+        _errorMessage = null;
       });
     } on ApiException catch (error) {
+      debugPrint('[Notification] error');
       if (!mounted) return;
 
       if (error.statusCode == 401) {
@@ -125,18 +132,29 @@ class _NotificationPageState extends State<NotificationPage> {
         return;
       }
 
-      setState(() {
-        _isLoading = false;
-        _errorMessage = error.message;
-      });
+      _handleLoadFailure(error.message, silent: silent);
     } catch (_) {
+      debugPrint('[Notification] error');
       if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-        _errorMessage = ApiException.unexpectedMessage;
-      });
+      _handleLoadFailure(ApiException.unexpectedMessage, silent: silent);
+    } finally {
+      _isFetching = false;
+      if (mounted && _isLoading) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _handleLoadFailure(String message, {required bool silent}) {
+    if (NotificationReadUx.keepExistingOnError(
+      silent: silent,
+      existing: _notifications,
+    )) {
+      _showMessage(message);
+      return;
+    }
+
+    setState(() => _errorMessage = message);
   }
 
   /// Urutan dari backend tidak dijamin, sedangkan halaman ini memisahkan
@@ -159,77 +177,135 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   List<NotificationModel> get _visibleNotifications {
-    final String? type = _filters[_selectedFilter];
-    if (type == null) return _notifications;
-
-    return _notifications.where((item) => item.type == type).toList();
+    return _notifications.where(_selectedFilter.matches).toList();
   }
 
-  void _selectFilter(String filter) {
-    if (filter == _selectedFilter) return;
+  void _selectFilter(String label) {
+    final NotificationCategoryFilter? filter =
+        NotificationCategoryFilter.fromLabel(label);
+    if (filter == null || filter == _selectedFilter) return;
     setState(() => _selectedFilter = filter);
   }
 
+  bool _isNavigatingFromTap = false;
+
   /// `PUT /notifications/{id}/read` saat kartunya ditekan, lalu membuka
-  /// halaman terkait bila notifikasinya merujuk ke jadwal kontrol.
+  /// halaman existing yang sesuai `type` dan `reference_id`.
   ///
   /// Notifikasi tidak dihapus. Bila sudah dibaca, permintaan baca dilewati
-  /// dan navigasi tetap dijalankan.
+  /// dan navigasi tetap dijalankan. Tap `medicine` ke Home, bukan AI-VOT.
+  /// Tap `video` tidak memanggil `POST /vot/start`.
   Future<void> _handleNotificationTap(NotificationModel item) async {
-    if (!item.isRead) {
-      await _markAsRead(item);
-      if (!mounted) return;
+    if (_readLock.isMarking(item.id) || _isBusy || _isNavigatingFromTap) {
+      return;
     }
 
-    if (!item.isControlScheduleNotification) return;
+    if (!item.isRead) {
+      final bool marked = await _markAsRead(item);
+      if (!mounted || !marked) return;
+    }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MedicinePage(
-          highlightedControlScheduleId: item.referenceId,
-        ),
-      ),
-    );
+    if (!NotificationTap.shouldNavigate(item)) return;
+    if (_isNavigatingFromTap) return;
+
+    switch (NotificationTap.targetOf(item)) {
+      case NotificationOpenTarget.home:
+        _isNavigatingFromTap = true;
+        _openMainPage(0);
+        return;
+      case NotificationOpenTarget.controlSchedule:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MedicinePage(
+              highlightedControlScheduleId: item.referenceId,
+            ),
+          ),
+        );
+        return;
+      case NotificationOpenTarget.complaintHistory:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ReportPage(
+              highlightedComplaintId: NotificationTap.complaintId(item),
+            ),
+          ),
+        );
+        return;
+      case NotificationOpenTarget.refillHistory:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MedicineRefillPage(
+              highlightedRefillId: NotificationTap.refillId(item),
+            ),
+          ),
+        );
+        return;
+      case NotificationOpenTarget.votSession:
+        if (NotificationTap.startsNewVotSession(item)) return;
+        final int? dailyMedicationId = NotificationTap.dailyMedicationId(item);
+        if (dailyMedicationId == null) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AiVotPage(
+              resumeDailyMedicationId: dailyMedicationId,
+            ),
+          ),
+        );
+        return;
+      case NotificationOpenTarget.none:
+        return;
+    }
   }
 
-  Future<void> _markAsRead(NotificationModel item) async {
-    if (item.isRead || _isBusy) return;
+  Future<bool> _markAsRead(NotificationModel item) async {
+    if (item.isRead) return true;
+    if (!_readLock.tryBegin(item.id)) return false;
 
-    setState(() => _isBusy = true);
+    setState(() {});
 
     try {
       final NotificationModel updated =
           await _notificationService.markAsRead(item.id);
 
-      if (!mounted) return;
+      if (!mounted) return false;
+
+      if (!updated.isRead) {
+        _showMessage("Notifikasi belum ditandai sudah dibaca. Silakan coba lagi.");
+        return false;
+      }
 
       setState(() {
-        _notifications = _notifications
-            .map((current) => current.id == updated.id ? updated : current)
-            .toList();
+        _notifications = NotificationReadUx.applyRead(_notifications, updated);
       });
+      return true;
     } on ApiException catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
 
       if (error.statusCode == 401) {
         await _handleExpiredSession();
-        return;
+        return false;
       }
 
       _showMessage(error.message);
+      return false;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       _showMessage(ApiException.unexpectedMessage);
+      return false;
     } finally {
-      if (mounted) setState(() => _isBusy = false);
+      _readLock.end(item.id);
+      if (mounted) setState(() {});
     }
   }
 
   /// `PUT /notifications/read-all`, berlaku untuk seluruh notifikasi milik
   /// pengguna, bukan hanya kategori yang sedang tampil.
   Future<void> _markAllAsRead() async {
-    if (_isBusy) return;
+    if (_isBusy || _readLock.isBusy) return;
 
     if (!_notifications.any((item) => !item.isRead)) {
       _showMessage("Tidak ada notifikasi yang belum dibaca.");
@@ -274,7 +350,7 @@ class _NotificationPageState extends State<NotificationPage> {
   /// sebagian mungkin terjadi, sehingga jumlah yang benar-benar terhapus
   /// dilaporkan apa adanya.
   Future<void> _confirmDeleteAll() async {
-    if (_isBusy || _notifications.isEmpty) return;
+    if (_isBusy || _readLock.isBusy || _notifications.isEmpty) return;
 
     final bool confirmed = await _askDeleteConfirmation() ?? false;
     if (!confirmed || !mounted) return;
@@ -426,19 +502,25 @@ class _NotificationPageState extends State<NotificationPage> {
         Padding(
           padding: EdgeInsets.symmetric(vertical: AppSpacing.xxxl),
           child: Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
+            child: Column(
+              children: [
+                CircularProgressIndicator(color: AppColors.primary),
+                SizedBox(height: AppSpacing.md),
+                Text("Memuat data..."),
+              ],
+            ),
           ),
         ),
       ];
     }
 
-    if (_errorMessage != null) {
+    if (_errorMessage != null && _notifications.isEmpty) {
       return [
         NotificationEmpty(
           icon: Icons.cloud_off_rounded,
           iconColor: AppColors.error,
           iconBackground: AppColors.errorContainer,
-          title: "Gagal memuat notifikasi",
+          title: "Gagal memuat notifikasi.",
           message: _errorMessage!,
           actionLabel: "Coba Lagi",
           onAction: _load,
@@ -457,7 +539,7 @@ class _NotificationPageState extends State<NotificationPage> {
         NotificationEmpty(
           message: _notifications.isEmpty
               ? "Semua aktivitas terbaru akan muncul di sini setelah tersedia."
-              : "Tidak ada notifikasi pada kategori $_selectedFilter.",
+              : "Tidak ada notifikasi pada kategori ${_selectedFilter.label}.",
         ),
       ];
     }
@@ -515,7 +597,9 @@ class _NotificationPageState extends State<NotificationPage> {
           subtitle: item.message,
           time: _timeLabel(item),
           isRead: item.isRead,
-          onTap: () => _handleNotificationTap(item),
+          onTap: _readLock.isMarking(item.id) || _isBusy || _isNavigatingFromTap
+              ? null
+              : () => _handleNotificationTap(item),
         ),
       );
     }
@@ -620,13 +704,16 @@ class _NotificationPageState extends State<NotificationPage> {
                                 onDeleteAll: _confirmDeleteAll,
                                 isMenuEnabled:
                                     _notifications.isNotEmpty && !_isBusy,
+                                unreadCount: NotificationReadUx.unreadCount(
+                                  _notifications,
+                                ),
                               ),
 
                               const SizedBox(height: 24),
 
                               NotificationFilterTabs(
-                                filters: _filters.keys.toList(),
-                                selected: _selectedFilter,
+                                filters: NotificationCategoryFilter.labels,
+                                selected: _selectedFilter.label,
                                 onSelected: _selectFilter,
                               ),
 

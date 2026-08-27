@@ -17,6 +17,9 @@ class ApiException implements Exception {
   static const String unexpectedMessage =
       'Terjadi kesalahan tidak terduga. Silakan coba lagi.';
 
+  static const String methodNotAllowedMessage =
+      'Metode request tidak sesuai dengan server.';
+
   factory ApiException.fromDioException(DioException error) {
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
@@ -52,6 +55,7 @@ class ApiException implements Exception {
       401 => 'Sesi tidak valid atau telah berakhir. Silakan masuk kembali.',
       403 => 'Anda tidak memiliki akses ke layanan ini.',
       404 => 'Layanan tidak ditemukan di server.',
+      405 => methodNotAllowedMessage,
       422 => detail ?? 'Data yang dikirim tidak sesuai format yang diminta.',
       _ =>
         status != null && status >= 500

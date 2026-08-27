@@ -8,13 +8,32 @@ enum DrinkingStage {
   completed,
 }
 
+/// Ambang temporal sequence minum.
+///
+/// MediaPipe di-throttle ~200ms per frame (`LocalDrinkingService`).
+/// [minDwell] 120ms artinya tahap berikutnya baru sah pada frame berikutnya
+/// (dua frame berurutan), bukan satu frame. Nilai lama 280ms memaksa dua
+/// interval throttle (~400ms) per tahap, sehingga pasien menahan obat terlalu
+/// lama di mulut.
+class DrinkingSequenceConfig {
+  const DrinkingSequenceConfig._();
+
+  static const double nearThreshold = 0.22;
+  static const double farThreshold = 0.34;
+  static const double approachDelta = 0.015;
+  static const Duration minDwell = Duration(milliseconds: 120);
+  static const Duration timeout = Duration(seconds: 20);
+  static const String timeoutMessage =
+      'Verifikasi minum belum terdeteksi. Silakan coba lagi.';
+}
+
 /// Mesin state temporal: dekat mulut saja tidak cukup untuk completed.
 class DrinkingSequenceMachine {
   DrinkingSequenceMachine({
-    this.nearThreshold = 0.22,
-    this.farThreshold = 0.34,
-    this.approachDelta = 0.015,
-    this.minDwell = const Duration(milliseconds: 280),
+    this.nearThreshold = DrinkingSequenceConfig.nearThreshold,
+    this.farThreshold = DrinkingSequenceConfig.farThreshold,
+    this.approachDelta = DrinkingSequenceConfig.approachDelta,
+    this.minDwell = DrinkingSequenceConfig.minDwell,
   });
 
   final double nearThreshold;
@@ -30,6 +49,15 @@ class DrinkingSequenceMachine {
     stage = DrinkingStage.waiting;
     _lastDistance = null;
     _enteredAt = null;
+  }
+
+  static bool hasTimedOut({
+    required DateTime? startedAt,
+    required DateTime now,
+    Duration timeout = DrinkingSequenceConfig.timeout,
+  }) {
+    if (startedAt == null) return false;
+    return now.difference(startedAt) >= timeout;
   }
 
   DrinkingStage update({
@@ -60,9 +88,7 @@ class DrinkingSequenceMachine {
         _setStage(DrinkingStage.handWithMedicine, now);
         break;
       case DrinkingStage.handWithMedicine:
-        if (dwellOk &&
-            previous != null &&
-            previous - distance >= approachDelta) {
+        if (dwellOk && _isApproaching(distance, previous)) {
           _setStage(DrinkingStage.approachingMouth, now);
         }
         break;
@@ -76,10 +102,9 @@ class DrinkingSequenceMachine {
         }
         break;
       case DrinkingStage.nearMouth:
-        if (dwellOk &&
-            previous != null &&
-            distance - previous >= approachDelta &&
-            distance > nearThreshold) {
+        // Keluar zona mulut setelah dwell, tanpa menuntut delta per-frame
+        // yang besar (gerakan pelan sering < approachDelta).
+        if (dwellOk && distance > nearThreshold) {
           _setStage(DrinkingStage.withdrawing, now);
         }
         break;
@@ -95,6 +120,11 @@ class DrinkingSequenceMachine {
     }
 
     return stage;
+  }
+
+  bool _isApproaching(double distance, double? previous) {
+    if (distance <= farThreshold) return true;
+    return previous != null && previous - distance >= approachDelta;
   }
 
   void _setStage(DrinkingStage next, DateTime now) {

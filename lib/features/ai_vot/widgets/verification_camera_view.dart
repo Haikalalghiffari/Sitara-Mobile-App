@@ -37,9 +37,7 @@ class VerificationCameraView extends StatelessWidget {
 
   bool get _isPreviewVisible {
     final camera = controller;
-    return cameraStatus.isReady &&
-        camera != null &&
-        camera.value.isInitialized;
+    return cameraStatus.isReady && camera != null && camera.value.isInitialized;
   }
 
   @override
@@ -55,8 +53,8 @@ class VerificationCameraView extends StatelessWidget {
               constraints.maxHeight,
             );
 
-            final Rect? mappedBox = detectionBox == null ||
-                    capturedImageSize == null
+            final Rect? mappedBox =
+                detectionBox == null || capturedImageSize == null
                 ? null
                 : BoundingBoxMapper.toPreview(
                     box: detectionBox!,
@@ -182,10 +180,7 @@ class _CameraStatusLayer extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.inverseSurface,
-            AppColors.primaryDark,
-          ],
+          colors: [AppColors.inverseSurface, AppColors.primaryDark],
         ),
       ),
       child: Center(
@@ -205,7 +200,8 @@ class _CameraStatusLayer extends StatelessWidget {
                 )
               else
                 Icon(
-                  status == CameraStatus.permissionDenied
+                  status == CameraStatus.permissionDenied ||
+                          status == CameraStatus.permissionPermanentlyDenied
                       ? Icons.no_photography_outlined
                       : Icons.videocam_off_outlined,
                   size: AppSpacing.iconXl,
@@ -236,7 +232,7 @@ class _CameraStatusLayer extends StatelessWidget {
                     Icons.refresh_rounded,
                     size: AppSpacing.iconMd,
                   ),
-                  label: const Text("Coba Lagi"),
+                  label: Text(status.retryLabel),
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primary,
@@ -277,10 +273,12 @@ class _InstructionBanner extends StatelessWidget {
       child: Text(
         state.instruction,
         textAlign: TextAlign.center,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

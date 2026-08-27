@@ -66,16 +66,15 @@ class VerificationIndicatorPanel extends StatelessWidget {
 
   static _IndicatorStatus _faceStatus(VerificationState state) {
     return switch (state) {
-      VerificationState.ready || VerificationState.starting =>
-        _IndicatorStatus.pending,
+      VerificationState.ready ||
+      VerificationState.starting => _IndicatorStatus.pending,
       VerificationState.faceVerifying => _IndicatorStatus.active,
       VerificationState.faceVerified ||
       VerificationState.medicineDetecting ||
       VerificationState.medicineMatched ||
       VerificationState.drinking ||
       VerificationState.completing ||
-      VerificationState.completed =>
-        _IndicatorStatus.done,
+      VerificationState.completed => _IndicatorStatus.done,
     };
   }
 
@@ -84,21 +83,19 @@ class VerificationIndicatorPanel extends StatelessWidget {
       VerificationState.ready ||
       VerificationState.starting ||
       VerificationState.faceVerifying ||
-      VerificationState.faceVerified =>
-        _IndicatorStatus.pending,
+      VerificationState.faceVerified => _IndicatorStatus.pending,
       VerificationState.medicineDetecting => _IndicatorStatus.active,
       VerificationState.medicineMatched ||
       VerificationState.drinking ||
       VerificationState.completing ||
-      VerificationState.completed =>
-        _IndicatorStatus.done,
+      VerificationState.completed => _IndicatorStatus.done,
     };
   }
 
   static _IndicatorStatus _drinkStatus(VerificationState state) {
     return switch (state) {
-      VerificationState.drinking || VerificationState.completing =>
-        _IndicatorStatus.active,
+      VerificationState.drinking ||
+      VerificationState.completing => _IndicatorStatus.active,
       VerificationState.completed => _IndicatorStatus.done,
       _ => _IndicatorStatus.pending,
     };
@@ -122,17 +119,14 @@ class _IndicatorItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final (Color background, Color foreground) = switch (status) {
       _IndicatorStatus.pending => (
-          AppColors.surfaceContainerHigh,
-          AppColors.textDisabled,
-        ),
+        AppColors.surfaceContainerHigh,
+        AppColors.textDisabled,
+      ),
       _IndicatorStatus.active => (
-          AppColors.warningContainer,
-          AppColors.warning,
-        ),
-      _IndicatorStatus.done => (
-          AppColors.successContainer,
-          AppColors.success,
-        ),
+        AppColors.warningContainer,
+        AppColors.warning,
+      ),
+      _IndicatorStatus.done => (AppColors.successContainer, AppColors.success),
     };
 
     return Column(
@@ -142,10 +136,7 @@ class _IndicatorItem extends StatelessWidget {
           duration: const Duration(milliseconds: 250),
           width: 44,
           height: 44,
-          decoration: BoxDecoration(
-            color: background,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
           child: Icon(
             status == _IndicatorStatus.done ? Icons.check_rounded : icon,
             size: AppSpacing.iconMd,
@@ -155,16 +146,19 @@ class _IndicatorItem extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         Text(
           label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 2),
         Text(
           caption,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
         ),
       ],
     );

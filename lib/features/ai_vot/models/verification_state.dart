@@ -57,6 +57,12 @@ extension VerificationStateX on VerificationState {
       this == VerificationState.medicineDetecting ||
       this == VerificationState.medicineMatched;
 
+  /// Layar tetap nyala hanya selama sesi VOT berjalan, bukan seluruh app.
+  bool get keepScreenAwake => switch (this) {
+        VerificationState.ready || VerificationState.completed => false,
+        _ => true,
+      };
+
   int get activeStepCount => switch (this) {
         VerificationState.ready ||
         VerificationState.starting ||

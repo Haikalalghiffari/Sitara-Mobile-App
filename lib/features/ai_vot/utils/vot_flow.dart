@@ -55,4 +55,30 @@ class VotFlow {
         ? VerificationState.completed
         : VerificationState.completing;
   }
+
+  /// Timeout/gagal minum: tetap DRINKING agar face+obat tidak diulang.
+  static VerificationState afterDrinkingTimeout() {
+    return VerificationState.drinking;
+  }
+
+  static VerificationState afterDrinkingRetry() {
+    return VerificationState.drinking;
+  }
+
+  /// Langkah yang boleh diulang dari state error saat ini.
+  static VotRetryTarget? retryTarget({
+    required VerificationState state,
+    required bool phaseError,
+  }) {
+    if (!phaseError) return null;
+    return switch (state) {
+      VerificationState.faceVerifying => VotRetryTarget.face,
+      VerificationState.medicineDetecting => VotRetryTarget.medicine,
+      VerificationState.drinking => VotRetryTarget.drinking,
+      VerificationState.completing => VotRetryTarget.complete,
+      _ => null,
+    };
+  }
 }
+
+enum VotRetryTarget { face, medicine, drinking, complete }

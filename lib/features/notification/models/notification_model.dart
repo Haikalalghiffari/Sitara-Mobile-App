@@ -55,6 +55,8 @@ class NotificationModel {
     );
   }
 
+  String get normalizedType => type.trim().toLowerCase();
+
   /// Notifikasi jadwal kontrol dari backend.
   ///
   /// `NotificationType.CONTROL` bernilai `control`;
@@ -62,9 +64,17 @@ class NotificationModel {
   /// Perbandingan tidak peka huruf besar/kecil karena serializer enum bisa
   /// mengirim nama atau nilai.
   bool get isControlScheduleNotification {
-    if (type.toLowerCase() == 'control') return true;
+    if (normalizedType == 'control') return true;
     return referenceType?.toLowerCase() == 'control_schedule';
   }
+
+  bool get isMedicineNotification => normalizedType == 'medicine';
+
+  bool get isComplaintNotification => normalizedType == 'complaint';
+
+  bool get isVideoNotification => normalizedType == 'video';
+
+  bool get isRefillNotification => normalizedType == 'refill';
 
   /// Waktu pembuatan dalam zona waktu perangkat.
   ///

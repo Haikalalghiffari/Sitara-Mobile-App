@@ -30,6 +30,8 @@ import '../../progress/services/treatment_service.dart';
 
 import '../../medicine/models/my_medicine_schedule.dart';
 import '../../medicine/services/medicine_schedule_service.dart';
+import '../../ai_vot/models/daily_medication.dart';
+import '../../ai_vot/services/vot_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -44,6 +46,7 @@ class _HomePageState extends State<HomePage> {
   final TreatmentService _treatmentService = TreatmentService();
   final MedicineScheduleService _medicineScheduleService =
       MedicineScheduleService();
+  final VotService _votService = VotService();
 
   UserProfile? _userProfile;
   PatientProfile? _patientProfile;
@@ -55,6 +58,9 @@ class _HomePageState extends State<HomePage> {
   List<MyMedicineSchedule> _medicineSchedules = <MyMedicineSchedule>[];
   String? _medicineScheduleError;
 
+  List<DailyMedication> _todayMedications = <DailyMedication>[];
+  String? _todayMedicationError;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +69,7 @@ class _HomePageState extends State<HomePage> {
     _loadProfile();
     _loadTreatments();
     _loadMedicineSchedules();
+    _loadTodayMedications();
   }
 
   Future<void> _loadProfile() async {
@@ -174,6 +181,33 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _loadTodayMedications() async {
+    try {
+      final List<DailyMedication> today = await _votService.listToday();
+      if (!mounted) return;
+      setState(() {
+        _todayMedications = today;
+        _todayMedicationError = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+      setState(() {
+        _todayMedications = <DailyMedication>[];
+        _todayMedicationError = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _todayMedications = <DailyMedication>[];
+        _todayMedicationError = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
   /// Backend `GET /treatments/my` seharusnya hanya mengirim pengobatan milik
   /// pemegang token. Bila `patient_id` tidak cocok dengan profil yang sedang
   /// login, data tidak ditampilkan.
@@ -193,8 +227,14 @@ class _HomePageState extends State<HomePage> {
     return MyTreatment.selectCurrent(_treatments);
   }
 
-  MyMedicineSchedule? get _nextDrinkSchedule {
-    return MyMedicineSchedule.selectNextDrink(_medicineSchedules);
+  /// Setelah AI-VOT ditutup: tarik ulang today + schedule resmi + treatment.
+  /// Progress tetap dari `GET /treatments/my`, tanpa increment lokal.
+  Future<void> _refreshHomeAfterVot() async {
+    await Future.wait<void>(<Future<void>>[
+      _loadTodayMedications(),
+      _loadMedicineSchedules(),
+      _loadTreatments(),
+    ]);
   }
 
   /// Memakai [AuthService.logout] yang sudah ada agar tidak ada mekanisme
@@ -253,6 +293,7 @@ class _HomePageState extends State<HomePage> {
                                 _loadProfile();
                                 _loadTreatments();
                                 _loadMedicineSchedules();
+                                _loadTodayMedications();
                               },
                             ),
 
@@ -266,13 +307,17 @@ class _HomePageState extends State<HomePage> {
                             const SizedBox(height: 24),
 
                             HomeMedicationTimerCard(
-                              schedule: _nextDrinkSchedule,
-                              errorMessage: _medicineScheduleError,
+                              today: _todayMedications,
+                              schedules: _medicineSchedules,
+                              errorMessage:
+                                  _todayMedicationError ?? _medicineScheduleError,
                             ),
 
                             const SizedBox(height: 28),
 
-                            const HomeVerificationSection(),
+                            HomeVerificationSection(
+                              onVotClosed: _refreshHomeAfterVot,
+                            ),
 
                             const SizedBox(height: 28),
 

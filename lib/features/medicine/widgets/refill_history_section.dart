@@ -17,9 +17,11 @@ class RefillHistorySection extends StatelessWidget {
     super.key,
     this.refills = const <Refill>[],
     this.schedules = const <MyMedicineSchedule>[],
+    this.highlightedRefillId,
     this.isLoading = false,
     this.errorMessage,
     this.onRetry,
+    this.onStartRequest,
   });
 
   final List<Refill> refills;
@@ -27,9 +29,13 @@ class RefillHistorySection extends StatelessWidget {
   /// Jadwal dari `GET /medicine-schedules/my`, dipakai hanya untuk menampilkan
   /// `medicine_name`. Bukan katalog `/medicines`.
   final List<MyMedicineSchedule> schedules;
+  final int? highlightedRefillId;
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback? onRetry;
+
+  /// CTA empty state. Tetap di halaman yang sama, menggulir ke formulir.
+  final VoidCallback? onStartRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -53,52 +59,57 @@ class RefillHistorySection extends StatelessWidget {
 
   Widget _content(BuildContext context) {
     if (isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
         child: Center(
-          child: SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(strokeWidth: 2.6),
+          child: Column(
+            children: [
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2.6),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                "Memuat riwayat...",
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+            ],
           ),
         ),
       );
     }
 
     if (errorMessage != null) {
-      return _notice(
-        context,
-        message: errorMessage!,
-        showRetry: true,
-      );
+      return _errorState(context, errorMessage!);
     }
 
     if (refills.isEmpty) {
-      return _notice(
-        context,
-        message:
-            "Belum ada permintaan pesan ulang. Permintaan yang Anda kirim akan muncul di sini.",
-        showRetry: false,
-      );
+      return _emptyState(context);
     }
 
     final List<Refill> sorted = Refill.sortedByNewest(refills);
+    final Refill? highlighted = Refill.findById(sorted, highlightedRefillId);
+    final List<Refill> visible = highlighted == null
+        ? sorted
+        : <Refill>[
+            highlighted,
+            ...sorted.where((Refill item) => item.id != highlighted.id),
+          ];
 
     return Column(
       children: <Widget>[
-        for (int index = 0; index < sorted.length; index++) ...[
+        for (int index = 0; index < visible.length; index++) ...[
           if (index > 0) const SizedBox(height: AppSpacing.md),
-          _refillCard(context, sorted[index]),
+          _refillCard(context, visible[index]),
         ],
       ],
     );
   }
 
-  Widget _notice(
-    BuildContext context, {
-    required String message,
-    required bool showRetry,
-  }) {
+  Widget _emptyState(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -110,9 +121,67 @@ class RefillHistorySection extends StatelessWidget {
         ),
       ),
       child: Column(
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 36,
+            color: AppColors.primary,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            "Belum ada riwayat permintaan obat.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            "Isi formulir di atas, lalu tekan Kirim Permintaan.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+          ),
+          if (onStartRequest != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            FilledButton(
+              onPressed: onStartRequest,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("Pesan Ulang Obat"),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _errorState(BuildContext context, String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.card,
+        border: Border.all(
+          color: AppColors.error.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
+          Text(
+            "Gagal memuat riwayat.",
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.error,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             message,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -120,10 +189,8 @@ class RefillHistorySection extends StatelessWidget {
                   height: 1.5,
                 ),
           ),
-
-          if (showRetry && onRetry != null) ...[
+          if (onRetry != null) ...[
             const SizedBox(height: AppSpacing.sm),
-
             TextButton(
               onPressed: onRetry,
               child: const Text("Coba Lagi"),
@@ -139,6 +206,7 @@ class RefillHistorySection extends StatelessWidget {
     final String? dateLabel = refill.createdAtLabel;
     final String? detail = refill.descriptionText;
     final String? nurseNote = refill.nurseNoteText;
+    final bool highlighted = refill.id == highlightedRefillId;
 
     return Container(
       width: double.infinity,
@@ -147,7 +215,8 @@ class RefillHistorySection extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: AppRadius.card,
         border: Border.all(
-          color: AppColors.outlineVariant,
+          color: highlighted ? AppColors.primary : AppColors.outlineVariant,
+          width: highlighted ? 2 : 1,
         ),
       ),
       child: Column(

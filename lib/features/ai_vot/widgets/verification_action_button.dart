@@ -18,6 +18,7 @@ class VerificationActionButton extends StatelessWidget {
     this.onRetryDrinking,
     this.onRetryComplete,
     this.onFinish,
+    this.onTestAgain,
   });
 
   final VerificationState state;
@@ -30,12 +31,53 @@ class VerificationActionButton extends StatelessWidget {
   final VoidCallback? onRetryDrinking;
   final VoidCallback? onRetryComplete;
   final VoidCallback? onFinish;
+  final VoidCallback? onTestAgain;
 
   @override
   Widget build(BuildContext context) {
+    if (state == VerificationState.completed && onTestAgain != null) {
+      return Column(
+        children: [
+          _button(
+            context,
+            label: "Test Lagi",
+            icon: Icons.refresh_rounded,
+            onPressed: onTestAgain,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            height: AppSpacing.buttonHeight,
+            child: OutlinedButton.icon(
+              onPressed: isBusy ? null : onFinish,
+              icon: const Icon(Icons.check_rounded),
+              label: const Text("Selesai"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
+                textStyle: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     final (String label, IconData? icon, VoidCallback? onPressed) =
         _resolve();
 
+    return _button(context, label: label, icon: icon, onPressed: onPressed);
+  }
+
+  Widget _button(
+    BuildContext context, {
+    required String label,
+    required IconData? icon,
+    required VoidCallback? onPressed,
+  }) {
     return SizedBox(
       width: double.infinity,
       height: AppSpacing.buttonHeight + AppSpacing.xs,

@@ -8,6 +8,7 @@ class NotificationHeader extends StatelessWidget {
     required this.onMarkAllRead,
     required this.onDeleteAll,
     this.isMenuEnabled = true,
+    this.unreadCount = 0,
   });
 
   final VoidCallback onMarkAllRead;
@@ -16,6 +17,9 @@ class NotificationHeader extends StatelessWidget {
   /// Menu dimatikan ketika daftar kosong, karena tidak ada yang bisa ditandai
   /// maupun dihapus.
   final bool isMenuEnabled;
+
+  /// Jumlah belum dibaca dari `is_read` backend, bukan hitungan lokal palsu.
+  final int unreadCount;
 
   @override
   Widget build(BuildContext context) {
@@ -39,11 +43,37 @@ class NotificationHeader extends StatelessWidget {
         const SizedBox(width: 10),
 
         Expanded(
-          child: Text(
-            "Notifikasi",
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  "Notifikasi",
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
+              ),
+              if (unreadCount > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "$unreadCount",
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
 

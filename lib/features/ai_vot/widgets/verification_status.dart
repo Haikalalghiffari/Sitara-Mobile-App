@@ -12,8 +12,7 @@ Color verificationStatusColor(VerificationState state) {
     VerificationState.ready => AppColors.primaryLight,
     VerificationState.faceVerified ||
     VerificationState.medicineMatched ||
-    VerificationState.completed =>
-      AppColors.success,
+    VerificationState.completed => AppColors.success,
     _ => AppColors.warning,
   };
 }
@@ -23,8 +22,9 @@ Color cameraStatusColor(CameraStatus status) {
   return switch (status) {
     CameraStatus.ready => AppColors.primaryLight,
     CameraStatus.initializing => AppColors.warning,
-    CameraStatus.permissionDenied || CameraStatus.unavailable =>
-      AppColors.error,
+    CameraStatus.permissionDenied ||
+    CameraStatus.permissionPermanentlyDenied ||
+    CameraStatus.unavailable => AppColors.error,
   };
 }
 
@@ -74,9 +74,9 @@ class VerificationStatusPill extends StatelessWidget {
               overrideLabel ?? state.statusLabel,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -111,7 +111,9 @@ class VerificationStepIndicator extends StatelessWidget {
 
           return Padding(
             padding: EdgeInsets.only(
-              right: index == kVerificationStepCount - 1 ? 0 : AppSpacing.xs + 2,
+              right: index == kVerificationStepCount - 1
+                  ? 0
+                  : AppSpacing.xs + 2,
             ),
             child: Container(
               width: 7,

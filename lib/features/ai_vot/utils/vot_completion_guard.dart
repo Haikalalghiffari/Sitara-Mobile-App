@@ -22,4 +22,10 @@ class VotCompletionGuard {
   void markFailure() {
     _inFlight = false;
   }
+
+  /// Sesi baru: complete boleh dikirim lagi dengan ID dari `/vot/start` berikutnya.
+  void reset() {
+    _inFlight = false;
+    _succeeded = false;
+  }
 }

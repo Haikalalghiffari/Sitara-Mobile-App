@@ -5,7 +5,13 @@ import '../../../core/theme/colors.dart';
 import '../../ai_vot/pages/ai_vot_page.dart';
 
 class HomeVerificationSection extends StatelessWidget {
-  const HomeVerificationSection({super.key});
+  const HomeVerificationSection({
+    super.key,
+    this.onVotClosed,
+  });
+
+  /// Dipanggil setelah halaman AI-VOT ditutup, tanpa mengganti rute Home.
+  final VoidCallback? onVotClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -61,13 +67,14 @@ class HomeVerificationSection extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
+              onPressed: () async {
+                await Navigator.push<void>(
                   context,
-                  MaterialPageRoute(
+                  MaterialPageRoute<void>(
                     builder: (_) => const AiVotPage(),
                   ),
                 );
+                onVotClosed?.call();
               },
               icon: const Icon(Icons.camera_alt_outlined),
               label: const Text("Buka Kamera"),

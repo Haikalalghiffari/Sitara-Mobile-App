@@ -29,6 +29,11 @@ class LocalDrinkingService {
   static const int _upperLip = 13;
   static const int _lowerLip = 14;
 
+  Future<void> ensureInitialized() async {
+    if (_ready) return;
+    await initialize();
+  }
+
   Future<void> initialize() async {
     await dispose();
     try {

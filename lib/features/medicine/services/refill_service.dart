@@ -47,17 +47,13 @@ class RefillService {
     required String reason,
     String? description,
   }) async {
-    final Map<String, dynamic> body = <String, dynamic>{
-      'treatment_id': treatmentId,
-      'medicine_id': medicineId,
-      'quantity': quantity,
-      'reason': reason,
-    };
-
-    final String? detail = description?.trim();
-    if (detail != null && detail.isNotEmpty) {
-      body['description'] = detail;
-    }
+    final Map<String, dynamic> body = Refill.createRequestBody(
+      treatmentId: treatmentId,
+      medicineId: medicineId,
+      quantity: quantity,
+      reason: reason,
+      description: description,
+    );
 
     try {
       final Response<dynamic> response = await _apiClient.dio.post<dynamic>(

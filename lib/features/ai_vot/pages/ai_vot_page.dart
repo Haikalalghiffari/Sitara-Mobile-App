@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/colors.dart';
@@ -27,15 +29,25 @@ import '../utils/drinking_sequence.dart';
 import '../utils/today_medication_picker.dart';
 import '../utils/vot_completion_guard.dart';
 import '../utils/vot_flow.dart';
+import '../utils/vot_screen_awake.dart';
 
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/verification_action_button.dart';
 import '../widgets/verification_camera_view.dart';
 import '../widgets/verification_indicator_panel.dart';
 import '../widgets/verification_info.dart';
+import '../widgets/vot_schedule_info.dart';
 
 class AiVotPage extends StatefulWidget {
-  const AiVotPage({super.key});
+  const AiVotPage({
+    super.key,
+    this.resumeDailyMedicationId,
+  });
+
+  /// `daily_medication_id` dari notifikasi `type=video`.
+  ///
+  /// Dipakai hanya untuk `GET /vot/{id}`. Tidak memanggil `POST /vot/start`.
+  final int? resumeDailyMedicationId;
 
   @override
   State<AiVotPage> createState() => _AiVotPageState();
@@ -55,6 +67,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   DailyMedication? _selected;
   int? _dailyMedicationId;
+  List<DailyMedication> _todayMedications = <DailyMedication>[];
+  VotScheduleSnapshot? _scheduleSnapshot;
+  Timer? _scheduleWatch;
+  bool _isRefreshingToday = false;
   MedicineBoundingBox? _detectionBox;
   Size? _capturedImageSize;
   String? _detectionLabel;
@@ -65,6 +81,15 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   final LocalDrinkingService _drinkingService = LocalDrinkingService();
   final DrinkingSequenceMachine _drinkingMachine = DrinkingSequenceMachine();
   final VotCompletionGuard _completionGuard = VotCompletionGuard();
+  final VotScreenAwake _screenAwake = VotScreenAwake();
+  Timer? _drinkingTimeout;
+  DateTime? _drinkingStartedAt;
+  Future<void>? _lifecycleGate;
+  int _cameraEpoch = 0;
+  bool _gateInFlight = false;
+  bool _isSyncingOnResume = false;
+  bool _didLeave = false;
+  bool _canTestAgain = false;
 
   @override
   void initState() {
@@ -74,35 +99,87 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   }
 
   @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    if (mounted) {
+      unawaited(
+        _screenAwake.sync(
+          keepOn: shouldKeepVotScreenAwake(
+            state: _state,
+            phaseError: _phaseError,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stopImageStream();
-    _drinkingService.dispose();
-    _cameraController?.dispose();
+    _cancelDrinkingTimeout();
+    _cancelScheduleWatch();
+    unawaited(_screenAwake.disable());
+    unawaited(_stopImageStream());
+    unawaited(_drinkingService.dispose());
+    final CameraController? controller = _cameraController;
     _cameraController = null;
+    unawaited(controller?.dispose() ?? Future<void>.value());
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? controller = _cameraController;
-
-    if (state == AppLifecycleState.inactive) {
-      if (controller != null) {
-        _releaseCamera();
-      }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _lifecycleGate = _handleBackground();
       return;
     }
 
-    if (state == AppLifecycleState.resumed &&
-        controller == null &&
-        !_awaitingRegistration &&
-        _selected != null) {
-      _initializeCamera().then((_) => _syncSessionOnResume());
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_handleForeground());
+    }
+  }
+
+  Future<void> _handleBackground() async {
+    final bool keepCameraForVot =
+        _state == VerificationState.drinking ||
+        _state == VerificationState.completing;
+    if (keepCameraForVot) {
+      await _stopImageStream();
+      return;
+    }
+    if (_cameraController != null) {
+      await _releaseCamera();
+    }
+  }
+
+  Future<void> _handleForeground() async {
+    await _lifecycleGate;
+    if (!mounted || _didLeave || _awaitingRegistration) return;
+    if (_state == VerificationState.completed) return;
+
+    if (_selected == null && _todayMedications.isNotEmpty) {
+      await _onScheduleWatchTick();
+      if (!mounted) return;
+      if (_selected == null) return;
+    }
+
+    if (_cameraController == null && _selected != null) {
+      await _initializeCamera();
+      if (!mounted) return;
+      await _syncSessionOnResume();
+      return;
+    }
+
+    if (_state == VerificationState.drinking && !_phaseError) {
+      unawaited(_startImageStream());
     }
   }
 
   Future<void> _continueAfterRegistrationCheck() async {
+    if (_gateInFlight) return;
+    _gateInFlight = true;
     setState(() {
       _awaitingRegistration = true;
       _statusError = null;
@@ -115,15 +192,13 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       if (!status.isRegistered) {
         final bool? completed = await Navigator.push<bool>(
           context,
-          MaterialPageRoute(
-            builder: (_) => const RegisterFacePage(),
-          ),
+          MaterialPageRoute(builder: (_) => const RegisterFacePage()),
         );
 
         if (!mounted) return;
 
         if (completed != true) {
-          Navigator.pop(context);
+          await _leaveVot();
           return;
         }
 
@@ -139,7 +214,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         }
       }
 
-      await _loadTodayMedication();
+      await _openTodayOrResumedSession();
       if (!mounted) return;
 
       if (_selected == null) {
@@ -153,6 +228,13 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         _awaitingRegistration = false;
       });
       await _initializeCamera();
+      if (!mounted) return;
+      if (_state == VerificationState.drinking) {
+        await _beginDrinking();
+      }
+      if (_state == VerificationState.completed) {
+        unawaited(_refreshCanTestAgain());
+      }
     } on ApiException catch (error) {
       if (!mounted) return;
       if (error.statusCode == 401) {
@@ -167,38 +249,151 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       setState(() {
         _statusError = ApiException.unexpectedMessage;
       });
+    } finally {
+      _gateInFlight = false;
     }
+  }
+
+  /// Membuka sesi existing lewat `GET /vot/{id}` bila datang dari notifikasi.
+  /// Tidak memanggil `POST /vot/start`.
+  Future<void> _openTodayOrResumedSession() async {
+    final int? resumeId = widget.resumeDailyMedicationId;
+    if (resumeId != null && resumeId > 0) {
+      final DailyMedication session = await _votService.getSession(resumeId);
+      if (!mounted) return;
+      _applyResumedSession(session);
+      return;
+    }
+    await _loadTodayMedication();
+  }
+
+  void _applyResumedSession(DailyMedication session) {
+    _dailyMedicationId = session.dailyMedicationId;
+    final bool verified = VotFlow.isServerVerified(
+      status: session.status,
+      votStep: session.votStep,
+    );
+    if (verified) {
+      _completionGuard.markSuccess();
+    }
+    setState(() {
+      _selected = session;
+      _statusError = null;
+      if (verified) {
+        _state = VerificationState.completed;
+        _feedbackMessage = "Verifikasi minum obat berhasil.";
+        _phaseError = false;
+        _isBusy = false;
+      } else {
+        _state = VotFlow.afterSession(votStep: session.votStep);
+      }
+    });
   }
 
   Future<void> _loadTodayMedication() async {
     final List<DailyMedication> today = await _votService.listToday();
     if (!mounted) return;
 
-    if (today.isEmpty) {
-      setState(() {
-        _selected = null;
-        _statusError = "Belum ada jadwal obat untuk hari ini.";
-      });
-      return;
-    }
+    _todayMedications = today;
+    final VotScheduleSnapshot snapshot =
+        TodayMedicationPicker.inspect(today);
 
-    final DailyMedication? picked = TodayMedicationPicker.pick(today);
-    if (picked == null) {
-      setState(() {
-        _selected = null;
-        _statusError =
-            "Tidak ada jadwal obat yang dapat diverifikasi hari ini.";
-      });
+    if (snapshot.selected != null && snapshot.selected!.isInProgress) {
+      final DailyMedication session = await _votService.getSession(
+        snapshot.selected!.dailyMedicationId,
+      );
+      if (!mounted) return;
+      _scheduleSnapshot = snapshot;
+      _cancelScheduleWatch();
+      _applyResumedSession(session);
       return;
     }
 
     setState(() {
-      _selected = picked;
+      _scheduleSnapshot = snapshot;
+      _selected = snapshot.selected;
       _statusError = null;
-      if (picked.isInProgress) {
-        _dailyMedicationId = picked.dailyMedicationId;
+      if (snapshot.selected == null) {
+        _dailyMedicationId = null;
       }
     });
+    _ensureScheduleWatch();
+  }
+
+  void _cancelScheduleWatch() {
+    _scheduleWatch?.cancel();
+    _scheduleWatch = null;
+  }
+
+  void _ensureScheduleWatch() {
+    if (_scheduleSnapshot?.kind != VotScheduleKind.upcoming) {
+      _cancelScheduleWatch();
+      return;
+    }
+    _scheduleWatch ??= Timer.periodic(
+      TodayMedicationPicker.watchInterval,
+      (_) => unawaited(_onScheduleWatchTick()),
+    );
+  }
+
+  /// Meminta ulang `GET /medications/today`. Tidak menimpa `eligible` lokal.
+  Future<void> _onScheduleWatchTick() async {
+    if (!mounted || _didLeave) return;
+    if (_isRefreshingToday) return;
+    if (_state != VerificationState.ready && _selected != null) return;
+
+    _isRefreshingToday = true;
+    try {
+      final List<DailyMedication> today = await _votService.listToday();
+      if (!mounted || _didLeave) return;
+      _todayMedications = today;
+      final VotScheduleSnapshot snapshot = TodayMedicationPicker.inspect(today);
+      final bool becameEligible =
+          snapshot.isEligible && _selected == null && snapshot.selected != null;
+
+      setState(() {
+        _scheduleSnapshot = snapshot;
+        if (snapshot.selected != null) {
+          _selected = snapshot.selected;
+        }
+      });
+      _ensureScheduleWatch();
+
+      if (becameEligible) {
+        await _activateEligibleSchedule();
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+      }
+    } catch (_) {
+    } finally {
+      _isRefreshingToday = false;
+    }
+  }
+
+  Future<void> _activateEligibleSchedule() async {
+    if (!mounted || _selected == null) return;
+    if (_selected!.isInProgress) {
+      try {
+        final DailyMedication session = await _votService.getSession(
+          _selected!.dailyMedicationId,
+        );
+        if (!mounted) return;
+        _applyResumedSession(session);
+      } on ApiException catch (error) {
+        if (!mounted) return;
+        if (error.statusCode == 401) {
+          await _handleExpiredSession();
+          return;
+        }
+        setState(() => _statusError = error.message);
+        return;
+      }
+    }
+    if (!mounted) return;
+    await _initializeCamera();
   }
 
   Future<void> _syncSessionOnResume() async {
@@ -206,6 +401,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (id == null) return;
     if (_completionGuard.inFlight) return;
     if (_state == VerificationState.completed) return;
+    if (_isSyncingOnResume) return;
+    _isSyncingOnResume = true;
 
     try {
       final DailyMedication session = await _votService.getSession(id);
@@ -223,10 +420,16 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
           _phaseError = false;
           _isBusy = false;
         });
+        unawaited(_refreshCanTestAgain());
         return;
       }
 
       if (_state == VerificationState.completing) {
+        setState(() => _selected = session);
+        return;
+      }
+
+      if (_state == VerificationState.drinking && _phaseError) {
         setState(() => _selected = session);
         return;
       }
@@ -245,7 +448,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       if (error.statusCode == 401) {
         await _handleExpiredSession();
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _isSyncingOnResume = false;
+    }
   }
 
   Future<void> _handleExpiredSession() async {
@@ -253,14 +459,152 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (_) => const LoginPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false,
     );
   }
 
-  Future<void> _releaseCamera() async {
+  Future<void> _refreshCanTestAgain() async {
+    if (_state != VerificationState.completed) return;
+    try {
+      final List<DailyMedication> today = await _votService.listToday();
+      if (!mounted || _state != VerificationState.completed) return;
+      _todayMedications = today;
+      final VotScheduleSnapshot snapshot = TodayMedicationPicker.inspect(today);
+      setState(() {
+        _scheduleSnapshot = snapshot;
+        _canTestAgain = snapshot.selected != null;
+        if (snapshot.kind == VotScheduleKind.upcoming) {
+          _feedbackMessage = snapshot.message;
+        } else if (snapshot.kind == VotScheduleKind.finished) {
+          _feedbackMessage = TodayMedicationPicker.allFinishedMessage();
+        }
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+      setState(() => _canTestAgain = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _canTestAgain = false);
+    }
+  }
+
+  Future<void> _testAgain() async {
+    if (_state != VerificationState.completed || _isBusy) return;
+
+    setState(() => _isBusy = true);
+
+    try {
+      final List<DailyMedication> today = await _votService.listToday();
+      if (!mounted) return;
+      _todayMedications = today;
+
+      final DailyMedication? picked = TodayMedicationPicker.pick(today);
+      if (picked == null) {
+        final VotScheduleSnapshot snapshot =
+            TodayMedicationPicker.inspect(today);
+        setState(() {
+          _isBusy = false;
+          _canTestAgain = false;
+          _scheduleSnapshot = snapshot;
+          _feedbackMessage = snapshot.kind == VotScheduleKind.upcoming
+              ? snapshot.message
+              : TodayMedicationPicker.allFinishedMessage();
+        });
+        return;
+      }
+
+      if (picked.isInProgress) {
+        final DailyMedication session = await _votService.getSession(
+          picked.dailyMedicationId,
+        );
+        if (!mounted) return;
+        _cancelDrinkingTimeout();
+        await _stopImageStream();
+        await _drinkingService.dispose();
+        _drinkingMachine.reset();
+        _completionGuard.reset();
+        if (!mounted) return;
+        _applyResumedSession(session);
+        setState(() {
+          _isBusy = false;
+          _canTestAgain = false;
+          _detectionBox = null;
+          _capturedImageSize = null;
+          _detectionLabel = null;
+          _drinkingStartedAt = null;
+        });
+        await _initializeCamera();
+        if (!mounted) return;
+        if (_state == VerificationState.drinking) {
+          await _beginDrinking();
+        }
+        return;
+      }
+
+      _cancelDrinkingTimeout();
+      await _stopImageStream();
+      await _drinkingService.dispose();
+      _drinkingMachine.reset();
+      _completionGuard.reset();
+
+      if (!mounted) return;
+      setState(() {
+        _selected = picked;
+        _dailyMedicationId =
+            picked.isInProgress ? picked.dailyMedicationId : null;
+        _state = VerificationState.ready;
+        _phaseError = false;
+        _isBusy = false;
+        _feedbackMessage = null;
+        _statusError = null;
+        _detectionBox = null;
+        _capturedImageSize = null;
+        _detectionLabel = null;
+        _canTestAgain = false;
+        _drinkingStartedAt = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+      setState(() {
+        _isBusy = false;
+        _feedbackMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _feedbackMessage = ApiException.unexpectedMessage;
+      });
+    }
+  }
+
+  Future<void> _leaveVot() async {
+    if (_didLeave) return;
+    _didLeave = true;
+    _cancelDrinkingTimeout();
+    await _stopImageStream();
+    await _drinkingService.dispose();
+    await _screenAwake.disable();
+    await _releaseCamera();
+    if (!mounted) return;
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _releaseCamera({bool invalidateInFlight = true}) async {
+    if (invalidateInFlight) {
+      _cameraEpoch++;
+    }
     await _stopImageStream();
     final CameraController? controller = _cameraController;
     _cameraController = null;
@@ -271,10 +615,20 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   }
 
   Future<void> _initializeCamera() async {
-    await _releaseCamera();
+    final CameraController? existing = _cameraController;
+    if (existing != null &&
+        existing.value.isInitialized &&
+        _cameraStatus.isReady) {
+      return;
+    }
+
+    final int epoch = ++_cameraEpoch;
+    await _releaseCamera(invalidateInFlight: false);
+    if (!mounted || epoch != _cameraEpoch) return;
 
     try {
       final List<CameraDescription> cameras = await availableCameras();
+      if (epoch != _cameraEpoch) return;
       if (cameras.isEmpty) {
         if (!mounted) return;
         setState(() => _cameraStatus = CameraStatus.unavailable);
@@ -294,7 +648,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       );
 
       await controller.initialize();
-      if (!mounted) {
+      if (!mounted || epoch != _cameraEpoch) {
         await controller.dispose();
         return;
       }
@@ -304,27 +658,63 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         _cameraStatus = CameraStatus.ready;
       });
     } on CameraException catch (exception) {
-      if (!mounted) return;
-      setState(() => _cameraStatus = _mapCameraException(exception));
+      if (!mounted || epoch != _cameraEpoch) return;
+      setState(
+        () => _cameraStatus = cameraStatusFromExceptionCode(exception.code),
+      );
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || epoch != _cameraEpoch) return;
       setState(() => _cameraStatus = CameraStatus.unavailable);
     }
   }
 
-  CameraStatus _mapCameraException(CameraException exception) {
-    return switch (exception.code) {
-      "CameraAccessDenied" ||
-      "CameraAccessDeniedWithoutPrompt" ||
-      "CameraAccessRestricted" =>
-        CameraStatus.permissionDenied,
-      _ => CameraStatus.unavailable,
-    };
+  Future<void> _retryCamera() async {
+    if (_cameraStatus.needsAppSettings) {
+      await openAppSettings();
+      return;
+    }
+    await _initializeCamera();
   }
 
   Future<void> _onStartPressed() async {
     final DailyMedication? selected = _selected;
     if (selected == null || _isBusy) return;
+
+    if (selected.isInProgress) {
+      setState(() {
+        _isBusy = true;
+        _phaseError = false;
+        _feedbackMessage = null;
+      });
+      try {
+        final DailyMedication session = await _votService.getSession(
+          selected.dailyMedicationId,
+        );
+        if (!mounted) return;
+        _applyResumedSession(session);
+        setState(() => _isBusy = false);
+        if (_state == VerificationState.drinking) {
+          await _beginDrinking();
+        }
+      } on ApiException catch (error) {
+        if (!mounted) return;
+        if (error.statusCode == 401) {
+          await _handleExpiredSession();
+          return;
+        }
+        setState(() {
+          _isBusy = false;
+          _feedbackMessage = error.message;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _isBusy = false;
+          _feedbackMessage = ApiException.unexpectedMessage;
+        });
+      }
+      return;
+    }
 
     if (!_cameraStatus.isReady) {
       setState(() {
@@ -359,10 +749,12 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         });
         return;
       }
-      final VerificationState next =
-          VotFlow.afterStart(votStep: started.votStep);
+      final VerificationState next = VotFlow.afterStart(
+        votStep: started.votStep,
+      );
       if (next == VerificationState.completed) {
         _completionGuard.markSuccess();
+        unawaited(_refreshCanTestAgain());
       }
 
       setState(() {
@@ -559,8 +951,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       final String message = result.detectedMedicine == null
           ? "Obat belum terdeteksi. Letakkan obat di dalam kotak."
           : (result.message.isNotEmpty
-              ? result.message
-              : "Obat yang terdeteksi tidak sesuai dengan jadwal.");
+                ? result.message
+                : "Obat yang terdeteksi tidak sesuai dengan jadwal.");
 
       setState(() {
         _state = VerificationState.medicineDetecting;
@@ -603,32 +995,75 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _beginDrinking() async {
+  Future<void> _beginDrinking({bool isRetry = false}) async {
+    _cancelDrinkingTimeout();
     await _stopImageStream();
+    _drinkingMachine.reset();
     setState(() {
-      _state = VerificationState.drinking;
+      _state = isRetry
+          ? VotFlow.afterDrinkingRetry()
+          : VerificationState.drinking;
       _isBusy = true;
       _phaseError = false;
-      _feedbackMessage = "Verifikasi visual proses minum.";
+      _feedbackMessage = "Minum obat seperti biasa, lalu jauhkan dari mulut.";
     });
 
     try {
-      await _drinkingService.initialize();
-      _drinkingMachine.reset();
+      await _drinkingService.ensureInitialized();
       await _startImageStream();
       if (!mounted) return;
+      _drinkingStartedAt = DateTime.now();
+      _armDrinkingTimeout();
       setState(() {
         _isBusy = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
+        _state = VerificationState.drinking;
         _phaseError = true;
         _isBusy = false;
         _feedbackMessage =
             "MediaPipe tidak dapat dijalankan. Periksa kamera lalu coba lagi.";
       });
     }
+  }
+
+  void _armDrinkingTimeout() {
+    _drinkingTimeout?.cancel();
+    _drinkingTimeout = Timer(
+      DrinkingSequenceConfig.timeout,
+      _onDrinkingTimeout,
+    );
+  }
+
+  void _cancelDrinkingTimeout() {
+    _drinkingTimeout?.cancel();
+    _drinkingTimeout = null;
+  }
+
+  void _onDrinkingTimeout() {
+    if (!mounted) return;
+    if (_state != VerificationState.drinking) return;
+    if (_completionGuard.inFlight) return;
+    if (!DrinkingSequenceMachine.hasTimedOut(
+      startedAt: _drinkingStartedAt,
+      now: DateTime.now(),
+    )) {
+      return;
+    }
+
+    unawaited(_stopImageStream());
+    setState(() {
+      _state = VotFlow.afterDrinkingTimeout();
+      _phaseError = true;
+      _isBusy = false;
+      _feedbackMessage = DrinkingSequenceConfig.timeoutMessage;
+    });
+  }
+
+  Future<void> _retryDrinking() async {
+    await _beginDrinking(isRetry: true);
   }
 
   Future<void> _startImageStream() async {
@@ -672,7 +1107,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     );
 
     if (stage == DrinkingStage.completed) {
-      _completeAfterDrinking();
+      unawaited(_completeAfterDrinking());
       return;
     }
 
@@ -681,7 +1116,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       DrinkingStage.waiting => "Tunjukkan tangan yang memegang obat.",
       DrinkingStage.handWithMedicine => "Dekatkan obat ke mulut.",
       DrinkingStage.approachingMouth => "Mendekati mulut...",
-      DrinkingStage.nearMouth => "Tahan sebentar dekat mulut.",
+      DrinkingStage.nearMouth => "Minum, lalu jauhkan tangan dari mulut.",
       DrinkingStage.withdrawing => "Jauhkan tangan dari mulut.",
       DrinkingStage.completed => "Memverifikasi proses minum...",
     };
@@ -691,13 +1126,15 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   }
 
   Future<void> _completeAfterDrinking() async {
+    _cancelDrinkingTimeout();
     if (!_completionGuard.tryBegin()) return;
 
     await _stopImageStream();
     await _drinkingService.dispose();
 
-    final Map<String, Object>? body =
-        VotFlow.completeRequestBody(_dailyMedicationId);
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      _dailyMedicationId,
+    );
     if (body == null) {
       _completionGuard.markFailure();
       if (!mounted) return;
@@ -725,8 +1162,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _retryComplete() async {
     if (!_completionGuard.tryBegin()) return;
 
-    final Map<String, Object>? body =
-        VotFlow.completeRequestBody(_dailyMedicationId);
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      _dailyMedicationId,
+    );
     if (body == null) {
       _completionGuard.markFailure();
       if (!mounted) return;
@@ -779,6 +1217,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
               ? result.message
               : "Verifikasi minum obat berhasil.";
         });
+        unawaited(_refreshCanTestAgain());
         return;
       }
 
@@ -836,10 +1275,12 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   Future<Size?> _readImageSize(String path) async {
     try {
-      final ui.ImmutableBuffer buffer =
-          await ui.ImmutableBuffer.fromUint8List(await File(path).readAsBytes());
-      final ui.ImageDescriptor descriptor =
-          await ui.ImageDescriptor.encoded(buffer);
+      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
+        await File(path).readAsBytes(),
+      );
+      final ui.ImageDescriptor descriptor = await ui.ImageDescriptor.encoded(
+        buffer,
+      );
       final Size size = Size(
         descriptor.width.toDouble(),
         descriptor.height.toDouble(),
@@ -886,35 +1327,95 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _withExitProtection(Widget child) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        unawaited(_leaveVot());
+      },
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_awaitingRegistration) {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        body: SafeArea(
-          child: Center(
+      return _withExitProtection(
+        Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.screenHorizontal,
+                ),
+                child: _statusError == null
+                    ? const CircularProgressIndicator()
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _statusError!,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          OutlinedButton.icon(
+                            onPressed: _continueAfterRegistrationCheck,
+                            icon: const Icon(Icons.refresh, size: 20),
+                            label: const Text("Coba Lagi"),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.primary),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: AppRadius.button,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_selected == null) {
+      final bool isApiError = _statusError != null;
+      return _withExitProtection(
+        Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.screenHorizontal,
               ),
-              child: _statusError == null
-                  ? const CircularProgressIndicator()
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
+              child: Column(
+                children: [
+                  AiVotTopBar(
+                    title: "AI-VOT Verifikasi",
+                    onBack: () => unawaited(_leaveVot()),
+                    onHelp: _showHelp,
+                  ),
+                  const Spacer(),
+                  if (isApiError)
+                    Column(
                       children: [
                         Text(
                           _statusError!,
                           textAlign: TextAlign.center,
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         OutlinedButton.icon(
                           onPressed: _continueAfterRegistrationCheck,
                           icon: const Icon(Icons.refresh, size: 20),
-                          label: const Text("Coba Lagi"),
+                          label: const Text("Muat Ulang"),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,
                             side: const BorderSide(color: AppColors.primary),
@@ -924,51 +1425,15 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                           ),
                         ),
                       ],
+                    )
+                  else
+                    VotScheduleInfo(
+                      message: _scheduleSnapshot?.message ??
+                          "Hari ini tidak ada jadwal minum obat.",
                     ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_selected == null) {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenHorizontal,
-            ),
-            child: Column(
-              children: [
-                AiVotTopBar(
-                  title: "AI-VOT Verifikasi",
-                  onBack: () => Navigator.pop(context),
-                  onHelp: _showHelp,
-                ),
-                const Spacer(),
-                Text(
-                  _statusError ?? "Belum ada jadwal obat untuk hari ini.",
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                OutlinedButton.icon(
-                  onPressed: _continueAfterRegistrationCheck,
-                  icon: const Icon(Icons.refresh, size: 20),
-                  label: const Text("Muat Ulang"),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: AppRadius.button,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-              ],
+                  const Spacer(),
+                ],
+              ),
             ),
           ),
         ),
@@ -977,73 +1442,102 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
     final bool canAct = _cameraStatus.isReady && !_isBusy;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: AppSpacing.contentMaxWidth,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.screenHorizontal,
+    return _withExitProtection(
+      Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: AppSpacing.contentMaxWidth,
               ),
-              child: Column(
-                children: [
-                  AiVotTopBar(
-                    title: "AI-VOT Verifikasi",
-                    onBack: () => Navigator.pop(context),
-                    onHelp: _showHelp,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  Expanded(
-                    child: VerificationCameraView(
-                      state: _state,
-                      cameraStatus: _cameraStatus,
-                      controller: _cameraController,
-                      onRetryCamera: _initializeCamera,
-                      detectionBox: _detectionBox,
-                      capturedImageSize: _capturedImageSize,
-                      detectionLabel: _detectionLabel,
-                      isFrontCamera: _cameraController?.description
-                              .lensDirection ==
-                          CameraLensDirection.front,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.screenHorizontal,
+                ),
+                child: Column(
+                  children: [
+                    AiVotTopBar(
+                      title: "AI-VOT Verifikasi",
+                      onBack: () => unawaited(_leaveVot()),
+                      onHelp: _showHelp,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  VerificationIndicatorPanel(state: _state),
-                  if (_feedbackMessage != null) ...[
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      _feedbackMessage!,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: _phaseError
-                                ? AppColors.error
-                                : AppColors.textSecondary,
-                          ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Expanded(
+                      flex: 3,
+                      child: VerificationCameraView(
+                        state: _state,
+                        cameraStatus: _cameraStatus,
+                        controller: _cameraController,
+                        onRetryCamera: _retryCamera,
+                        detectionBox: _detectionBox,
+                        capturedImageSize: _capturedImageSize,
+                        detectionLabel: _detectionLabel,
+                        isFrontCamera:
+                            _cameraController?.description.lensDirection ==
+                            CameraLensDirection.front,
+                      ),
+                    ),
+                    Flexible(
+                      flex: 2,
+                      fit: FlexFit.loose,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: AppSpacing.lg),
+                            VerificationIndicatorPanel(state: _state),
+                            if (_feedbackMessage != null) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              Text(
+                                _feedbackMessage!,
+                                textAlign: TextAlign.center,
+                                maxLines: 4,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: _phaseError
+                                          ? AppColors.error
+                                          : AppColors.textSecondary,
+                                    ),
+                              ),
+                            ],
+                            const SizedBox(height: AppSpacing.lg),
+                            VerificationActionButton(
+                              state: _state,
+                              isBusy: _isBusy,
+                              hasPhaseError: _phaseError,
+                              onStart: canAct ? _onStartPressed : null,
+                              onRetryFace: canAct
+                                  ? _captureAndVerifyFace
+                                  : null,
+                              onDetectMedicine: canAct
+                                  ? _captureAndDetectMedicine
+                                  : null,
+                              onRetryMedicine: canAct
+                                  ? _captureAndDetectMedicine
+                                  : null,
+                              onRetryDrinking: canAct ? _retryDrinking : null,
+                              onRetryComplete: !_isBusy ? _retryComplete : null,
+                              onFinish: () => unawaited(_leaveVot()),
+                              onTestAgain: _canTestAgain && !_isBusy
+                                  ? () => unawaited(_testAgain())
+                                  : null,
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            VerificationInfo(
+                              medicineName: _selected?.medicineName,
+                              scheduleMessage: _state == VerificationState.ready
+                                  ? _scheduleSnapshot?.message
+                                  : null,
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
-                  const SizedBox(height: AppSpacing.lg),
-                  VerificationActionButton(
-                    state: _state,
-                    isBusy: _isBusy,
-                    hasPhaseError: _phaseError,
-                    onStart: canAct ? _onStartPressed : null,
-                    onRetryFace: canAct ? _captureAndVerifyFace : null,
-                    onDetectMedicine:
-                        canAct ? _captureAndDetectMedicine : null,
-                    onRetryMedicine:
-                        canAct ? _captureAndDetectMedicine : null,
-                    onRetryDrinking: canAct ? _beginDrinking : null,
-                    onRetryComplete: !_isBusy ? _retryComplete : null,
-                    onFinish: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  VerificationInfo(medicineName: _selected?.medicineName),
-                  const SizedBox(height: AppSpacing.lg),
-                ],
+                ),
               ),
             ),
           ),

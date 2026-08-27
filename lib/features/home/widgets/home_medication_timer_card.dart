@@ -6,24 +6,24 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
+import '../../ai_vot/models/daily_medication.dart';
 import '../../medicine/models/my_medicine_schedule.dart';
+import '../utils/home_medication_countdown.dart';
 
-/// Hitung mundur menuju jadwal minum obat berikutnya.
+/// Hitung mundur menuju occurrence resmi berikutnya.
 ///
-/// Sumber waktunya `drink_time` pada `MyMedicineScheduleResponse` dari
-/// `GET /medicine-schedules/my`, dibandingkan dengan jam perangkat tanpa
-/// konversi zona waktu. Bila jadwal tidak ada atau tidak terbaca, empty state
-/// "-- : -- : --" dipertahankan.
+/// Target dihitung ulang tiap detik dari `drink_time` + status today, tanpa
+/// restart halaman.
 class HomeMedicationTimerCard extends StatefulWidget {
   const HomeMedicationTimerCard({
     super.key,
-    this.schedule,
+    this.today = const <DailyMedication>[],
+    this.schedules = const <MyMedicineSchedule>[],
     this.errorMessage,
   });
 
-  /// Jadwal minum terdekat milik pasien yang sedang login.
-  final MyMedicineSchedule? schedule;
-
+  final List<DailyMedication> today;
+  final List<MyMedicineSchedule> schedules;
   final String? errorMessage;
 
   @override
@@ -52,12 +52,12 @@ class _HomeMedicationTimerCardState extends State<HomeMedicationTimerCard> {
     super.dispose();
   }
 
-  /// Ticker hanya dihidupkan saat ada jadwal yang jamnya terbaca, supaya
-  /// kartu tidak melakukan rebuild tiap detik ketika menampilkan empty state.
-  void _syncTicker() {
-    final bool needsTicker = widget.schedule?.drinkMinutesOfDay != null;
+  bool get _hasSource {
+    return widget.today.isNotEmpty || widget.schedules.isNotEmpty;
+  }
 
-    if (needsTicker) {
+  void _syncTicker() {
+    if (_hasSource) {
       _ticker ??= Timer.periodic(
         const Duration(seconds: 1),
         (_) {
@@ -74,7 +74,11 @@ class _HomeMedicationTimerCardState extends State<HomeMedicationTimerCard> {
   @override
   Widget build(BuildContext context) {
     final DateTime now = DateTime.now();
-    final DateTime? nextDrink = widget.schedule?.nextOccurrence(now: now);
+    final HomeDrinkTarget? target = HomeMedicationCountdown.resolve(
+      today: widget.today,
+      schedules: widget.schedules,
+      now: now,
+    );
 
     return Container(
       width: double.infinity,
@@ -100,7 +104,7 @@ class _HomeMedicationTimerCardState extends State<HomeMedicationTimerCard> {
 
           Center(
             child: Text(
-              _countdownLabel(nextDrink, now),
+              target?.countdownLabel(now) ?? "-- : -- : --",
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -125,7 +129,9 @@ class _HomeMedicationTimerCardState extends State<HomeMedicationTimerCard> {
 
               Flexible(
                 child: Text(
-                  _scheduleLabel(nextDrink, now),
+                  target?.scheduleLabelAt(now) ??
+                      widget.errorMessage ??
+                      "Jadwal belum tersedia",
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white70,
@@ -138,35 +144,5 @@ class _HomeMedicationTimerCardState extends State<HomeMedicationTimerCard> {
         ],
       ),
     );
-  }
-
-  String _countdownLabel(DateTime? nextDrink, DateTime now) {
-    if (nextDrink == null) return "-- : -- : --";
-
-    Duration remaining = nextDrink.difference(now);
-    if (remaining.isNegative) remaining = Duration.zero;
-
-    final String hours =
-        remaining.inHours.toString().padLeft(2, '0');
-    final String minutes =
-        remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final String seconds =
-        remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
-
-    return "$hours : $minutes : $seconds";
-  }
-
-  String _scheduleLabel(DateTime? nextDrink, DateTime now) {
-    final String? time = widget.schedule?.drinkTimeLabel;
-
-    if (nextDrink == null || time == null) {
-      return widget.errorMessage ?? "Jadwal belum tersedia";
-    }
-
-    final bool isToday = nextDrink.year == now.year &&
-        nextDrink.month == now.month &&
-        nextDrink.day == now.day;
-
-    return "${isToday ? 'Hari Ini' : 'Besok'} • $time";
   }
 }

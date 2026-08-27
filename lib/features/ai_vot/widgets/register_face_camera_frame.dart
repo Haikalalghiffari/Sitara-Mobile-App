@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -34,42 +35,44 @@ class RegisterFaceCameraFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          width: 240,
-          height: 240,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColors.primary,
-                width: 4,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: ClipOval(
-                child: ColoredBox(
-                  color: AppColors.inverseSurface,
-                  child: _buildInner(),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double size = math.min(240, constraints.maxWidth);
+        return Column(
+          children: [
+            SizedBox(
+              width: size,
+              height: size,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary, width: 4),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: ClipOval(
+                    child: ColoredBox(
+                      color: AppColors.inverseSurface,
+                      child: _buildInner(),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        _StatusPill(
-          label: capturedImagePath != null
-              ? "Pratinjau foto"
-              : cameraStatus.isReady
+            const SizedBox(height: AppSpacing.md),
+            _StatusPill(
+              label: capturedImagePath != null
+                  ? "Pratinjau foto"
+                  : cameraStatus.isReady
                   ? "Siap mengambil foto"
                   : cameraStatus.statusLabel,
-          color: capturedImagePath != null || cameraStatus.isReady
-              ? AppColors.primary
-              : cameraStatusColor(cameraStatus),
-        ),
-      ],
+              color: capturedImagePath != null || cameraStatus.isReady
+                  ? AppColors.primary
+                  : cameraStatusColor(cameraStatus),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -88,10 +91,7 @@ class RegisterFaceCameraFrame extends StatelessWidget {
       return _LivePreview(controller: controller!);
     }
 
-    return _StatusPlaceholder(
-      status: cameraStatus,
-      onRetry: onRetryCamera,
-    );
+    return _StatusPlaceholder(status: cameraStatus, onRetry: onRetryCamera);
   }
 }
 
@@ -119,10 +119,7 @@ class _LivePreview extends StatelessWidget {
 }
 
 class _StatusPlaceholder extends StatelessWidget {
-  const _StatusPlaceholder({
-    required this.status,
-    this.onRetry,
-  });
+  const _StatusPlaceholder({required this.status, this.onRetry});
 
   final CameraStatus status;
   final VoidCallback? onRetry;
@@ -150,7 +147,8 @@ class _StatusPlaceholder extends StatelessWidget {
                 )
               else
                 Icon(
-                  status == CameraStatus.permissionDenied
+                  status == CameraStatus.permissionDenied ||
+                          status == CameraStatus.permissionPermanentlyDenied
                       ? Icons.no_photography_outlined
                       : Icons.videocam_off_outlined,
                   color: Colors.white.withValues(alpha: 0.8),
@@ -161,16 +159,16 @@ class _StatusPlaceholder extends StatelessWidget {
                 status.description,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.85),
-                    ),
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
               ),
               if (!isBusy && onRetry != null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 TextButton(
                   onPressed: onRetry,
-                  child: const Text(
-                    "Coba Lagi",
-                    style: TextStyle(color: Colors.white),
+                  child: Text(
+                    status.retryLabel,
+                    style: const TextStyle(color: Colors.white),
                   ),
                 ),
               ],
@@ -183,10 +181,7 @@ class _StatusPlaceholder extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({
-    required this.label,
-    required this.color,
-  });
+  const _StatusPill({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -208,10 +203,7 @@ class _StatusPill extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: AppSpacing.sm),
           Flexible(
@@ -219,9 +211,9 @@ class _StatusPill extends StatelessWidget {
               label,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -229,4 +221,3 @@ class _StatusPill extends StatelessWidget {
     );
   }
 }
-
