@@ -71,6 +71,7 @@ class HomeVerificationSection extends StatelessWidget {
                 await Navigator.push<void>(
                   context,
                   MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: '/ai-vot'),
                     builder: (_) => const AiVotPage(),
                   ),
                 );

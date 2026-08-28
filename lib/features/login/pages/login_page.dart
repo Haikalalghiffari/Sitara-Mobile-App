@@ -6,6 +6,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../../home/pages/home_page.dart';
+import '../../notification/utils/notification_inbox_scope.dart';
 
 import '../controllers/login_controller.dart';
 
@@ -106,6 +107,8 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       setState(() => _isLoading = false);
+
+      NotificationInboxScope.maybeOf(context)?.start();
 
       Navigator.pushReplacement(
         context,

@@ -7,6 +7,10 @@ import 'core/theme/app_theme.dart';
 import 'features/login/pages/activate_account_page.dart';
 import 'features/login/pages/login_page.dart';
 import 'features/login/utils/activation_link.dart';
+import 'features/notification/utils/notification_inbox.dart';
+import 'features/notification/utils/notification_inbox_scope.dart';
+import 'features/notification/utils/notification_route_tracker.dart';
+import 'features/notification/widgets/notification_overlay_host.dart';
 
 final GlobalKey<NavigatorState> sitaraNavigatorKey =
     GlobalKey<NavigatorState>();
@@ -25,6 +29,9 @@ class SitaraApp extends StatefulWidget {
 
 class _SitaraAppState extends State<SitaraApp> {
   final AppLinks _appLinks = AppLinks();
+  final NotificationInbox _notificationInbox = NotificationInbox();
+  final NotificationRouteTracker _notificationRouteTracker =
+      NotificationRouteTracker();
   StreamSubscription<Uri>? _linkSubscription;
 
   @override
@@ -34,11 +41,15 @@ class _SitaraAppState extends State<SitaraApp> {
       _handleIncomingUri,
       onError: (_) {},
     );
+    _notificationRouteTracker.onRouteChanged = () {
+      unawaited(_notificationInbox.syncAuth());
+    };
   }
 
   @override
   void dispose() {
     _linkSubscription?.cancel();
+    _notificationInbox.dispose();
     super.dispose();
   }
 
@@ -82,12 +93,24 @@ class _SitaraAppState extends State<SitaraApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SITARA Health',
-      navigatorKey: sitaraNavigatorKey,
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      home: const LoginPage(),
+    return NotificationInboxScope(
+      inbox: _notificationInbox,
+      child: MaterialApp(
+        title: 'SITARA Health',
+        navigatorKey: sitaraNavigatorKey,
+        navigatorObservers: <NavigatorObserver>[_notificationRouteTracker],
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        builder: (BuildContext context, Widget? child) {
+          return NotificationOverlayHost(
+            inbox: _notificationInbox,
+            navigatorKey: sitaraNavigatorKey,
+            routeTracker: _notificationRouteTracker,
+            child: child ?? const SizedBox.shrink(),
+          );
+        },
+        home: const LoginPage(),
+      ),
     );
   }
 }

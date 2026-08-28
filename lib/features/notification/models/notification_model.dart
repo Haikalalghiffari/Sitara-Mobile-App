@@ -1,3 +1,5 @@
+import '../utils/notification_time.dart';
+
 /// Response `NotificationResponse` dari backend SITARA.
 ///
 /// Field mengikuti persis apa yang dikirim backend, tanpa tambahan.
@@ -78,14 +80,9 @@ class NotificationModel {
 
   /// Waktu pembuatan dalam zona waktu perangkat.
   ///
-  /// Backend mengirim tipe `date-time`. Bila nilainya menyertakan penanda UTC,
-  /// hasilnya dikonversi ke waktu lokal; bila tidak, nilai dipakai apa adanya
-  /// tanpa mengasumsikan zona waktu tertentu.
-  DateTime? get createdAtDateTime {
-    final DateTime? parsed = DateTime.tryParse(createdAt);
-    if (parsed == null) return null;
-    return parsed.isUtc ? parsed.toLocal() : parsed;
-  }
+  /// Offset/`Z` diubah ke local sekali. String tanpa zona dipakai sebagai
+  /// jam dinding lokal, tanpa konversi kedua.
+  DateTime? get createdAtDateTime => NotificationTime.parse(createdAt);
 
   @override
   String toString() =>

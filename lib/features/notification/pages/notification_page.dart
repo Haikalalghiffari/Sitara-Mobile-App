@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
@@ -11,10 +13,7 @@ import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 import '../../home/pages/home_page.dart';
 import '../../progress/pages/progress_page.dart';
 import '../../medicine/pages/medicine_page.dart';
-import '../../medicine/pages/medicine_refill_page.dart';
 import '../../profile/pages/profile_page.dart';
-import '../../report/pages/report_page.dart';
-import '../../ai_vot/pages/ai_vot_page.dart';
 
 import '../../login/pages/login_page.dart';
 import '../../login/services/auth_service.dart';
@@ -22,8 +21,12 @@ import '../../login/services/auth_service.dart';
 import '../models/notification_model.dart';
 import '../services/notification_service.dart';
 import '../utils/notification_filter.dart';
+import '../utils/notification_inbox.dart';
+import '../utils/notification_inbox_scope.dart';
+import '../utils/notification_open.dart';
 import '../utils/notification_read_ux.dart';
 import '../utils/notification_tap.dart';
+import '../utils/notification_time.dart';
 
 import '../widgets/notification_header.dart';
 import '../widgets/notification_filter_tabs.dart';
@@ -63,12 +66,55 @@ class _NotificationPageState extends State<NotificationPage> {
   /// setiap kali daftar dimuat.
   int? _userId;
 
+  NotificationInbox? _inbox;
+  Timer? _relativeClock;
+
   @override
   void initState() {
     super.initState();
-    // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
-    // berulang setiap kali widget di-rebuild.
-    _load();
+    _relativeClock = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final NotificationInbox? inbox = NotificationInboxScope.maybeOf(context);
+    if (!identical(inbox, _inbox)) {
+      _inbox?.removeListener(_onInboxChanged);
+      _inbox = inbox;
+      _inbox?.addListener(_onInboxChanged);
+      if (_inbox != null && _inbox!.items.isNotEmpty) {
+        _notifications = _sortedByNewest(_inbox!.items);
+        _isLoading = false;
+      }
+    }
+    if (!_didStartLoad) {
+      _didStartLoad = true;
+      _load(silent: _notifications.isNotEmpty);
+    }
+  }
+
+  bool _didStartLoad = false;
+
+  void _onInboxChanged() {
+    final NotificationInbox? inbox = _inbox;
+    if (!mounted || inbox == null) return;
+    setState(() {
+      _notifications = _sortedByNewest(inbox.items);
+      if (_notifications.isNotEmpty) {
+        _isLoading = false;
+        _errorMessage = null;
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _relativeClock?.cancel();
+    _inbox?.removeListener(_onInboxChanged);
+    super.dispose();
   }
 
   /// Memuat daftar notifikasi dari backend.
@@ -96,8 +142,14 @@ class _NotificationPageState extends State<NotificationPage> {
       final int userId = _userId ?? (await _authService.getProfile()).id;
 
       debugPrint('[Notification] GET /notifications');
-      final List<NotificationModel> notifications =
-          await _notificationService.getNotifications();
+      final NotificationInbox? inbox = _inbox;
+      final List<NotificationModel> notifications;
+      if (inbox != null) {
+        await inbox.refresh(silent: true);
+        notifications = inbox.items;
+      } else {
+        notifications = await _notificationService.getNotifications();
+      }
       debugPrint('[Notification] response received');
 
       if (!mounted) return;
@@ -208,57 +260,8 @@ class _NotificationPageState extends State<NotificationPage> {
     if (!NotificationTap.shouldNavigate(item)) return;
     if (_isNavigatingFromTap) return;
 
-    switch (NotificationTap.targetOf(item)) {
-      case NotificationOpenTarget.home:
-        _isNavigatingFromTap = true;
-        _openMainPage(0);
-        return;
-      case NotificationOpenTarget.controlSchedule:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MedicinePage(
-              highlightedControlScheduleId: item.referenceId,
-            ),
-          ),
-        );
-        return;
-      case NotificationOpenTarget.complaintHistory:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ReportPage(
-              highlightedComplaintId: NotificationTap.complaintId(item),
-            ),
-          ),
-        );
-        return;
-      case NotificationOpenTarget.refillHistory:
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MedicineRefillPage(
-              highlightedRefillId: NotificationTap.refillId(item),
-            ),
-          ),
-        );
-        return;
-      case NotificationOpenTarget.votSession:
-        if (NotificationTap.startsNewVotSession(item)) return;
-        final int? dailyMedicationId = NotificationTap.dailyMedicationId(item);
-        if (dailyMedicationId == null) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AiVotPage(
-              resumeDailyMedicationId: dailyMedicationId,
-            ),
-          ),
-        );
-        return;
-      case NotificationOpenTarget.none:
-        return;
-    }
+    _isNavigatingFromTap = true;
+    NotificationOpen.go(context, item);
   }
 
   Future<bool> _markAsRead(NotificationModel item) async {
@@ -268,6 +271,20 @@ class _NotificationPageState extends State<NotificationPage> {
     setState(() {});
 
     try {
+      final NotificationInbox? inbox = _inbox;
+      if (inbox != null) {
+        final bool marked = await inbox.markAsRead(item.id);
+        if (!mounted) return false;
+        if (!marked) {
+          _showMessage("Notifikasi belum ditandai sudah dibaca. Silakan coba lagi.");
+          return false;
+        }
+        setState(() {
+          _notifications = _sortedByNewest(inbox.items);
+        });
+        return true;
+      }
+
       final NotificationModel updated =
           await _notificationService.markAsRead(item.id);
 
@@ -315,6 +332,21 @@ class _NotificationPageState extends State<NotificationPage> {
     setState(() => _isBusy = true);
 
     try {
+      final NotificationInbox? inbox = _inbox;
+      if (inbox != null) {
+        final bool marked = await inbox.markAllAsRead();
+        if (!mounted) return;
+        if (!marked) {
+          _showMessage(ApiException.unexpectedMessage);
+          return;
+        }
+        setState(() {
+          _notifications = _sortedByNewest(inbox.items);
+        });
+        _showMessage("Semua notifikasi ditandai sudah dibaca.");
+        return;
+      }
+
       await _notificationService.markAllAsRead();
 
       if (!mounted) return;
@@ -642,31 +674,7 @@ class _NotificationPageState extends State<NotificationPage> {
 
   /// Mengubah `created_at` menjadi keterangan waktu yang mudah dibaca.
   String _timeLabel(NotificationModel item) {
-    final DateTime? created = item.createdAtDateTime;
-    if (created == null) return "";
-
-    final DateTime now = DateTime.now();
-    final Duration elapsed = now.difference(created);
-
-    if (elapsed.isNegative) return _clock(created);
-    if (elapsed.inMinutes < 1) return "Baru saja";
-    if (elapsed.inMinutes < 60) return "${elapsed.inMinutes} mnt lalu";
-
-    final int dayGap = DateTime(now.year, now.month, now.day)
-        .difference(DateTime(created.year, created.month, created.day))
-        .inDays;
-
-    if (dayGap == 0) return "${elapsed.inHours} jam lalu";
-    if (dayGap == 1) return "Kemarin, ${_clock(created)}";
-    if (dayGap < 7) return "$dayGap hari lalu";
-
-    return "${created.day}/${created.month}/${created.year}";
-  }
-
-  String _clock(DateTime time) {
-    final String hour = time.hour.toString().padLeft(2, '0');
-    final String minute = time.minute.toString().padLeft(2, '0');
-    return "$hour.$minute";
+    return NotificationTime.labelFor(item);
   }
 
   @override
