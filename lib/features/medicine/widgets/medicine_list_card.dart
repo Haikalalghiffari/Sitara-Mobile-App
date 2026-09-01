@@ -80,7 +80,9 @@ class MedicineListCard extends StatelessWidget {
           else ...[
             for (int index = 0; index < schedules.length; index++) ...[
               if (index > 0) const Divider(height: 1),
-              _medicineTile(context: context, schedule: schedules[index], 
+              _medicineTile(
+                context,
+                schedules[index], 
                 name: schedules[index].displayName,
                 dosage: schedules[index].dosage.trim().isEmpty
                     ? "Dosis belum tersedia"
@@ -91,11 +93,12 @@ class MedicineListCard extends StatelessWidget {
           ],
         ],
       ),
-    ),
     );
   }
 
-  Widget _medicineTile(context: context, schedule: schedules[index], {
+  Widget _medicineTile(
+    BuildContext context,
+    MyMedicineSchedule schedule, {
     required String name,
     required String dosage,
     required String badge,

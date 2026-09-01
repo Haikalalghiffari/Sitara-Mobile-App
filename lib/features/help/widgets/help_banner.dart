@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
-import '../../../core/theme/spacing.dart';
 
 class HelpBanner extends StatelessWidget {
   const HelpBanner({super.key});

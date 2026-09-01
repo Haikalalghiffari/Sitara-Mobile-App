@@ -1,17 +1,46 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/notification_model.dart';
 
 /// Parse `created_at` dan label waktu relatif, tanpa polling API.
+///
+/// Convention backend: `Notification.created_at` disimpan UTC. String tanpa
+/// zona (`Z` / offset) dianggap UTC, lalu diubah ke local sekali.
 class NotificationTime {
   const NotificationTime._();
 
-  /// Satu kali parse. Offset/`Z` → UTC lalu local. Naive → jam dinding lokal.
+  /// Offset/`Z` → UTC lalu local sekali. Naive → UTC lalu local sekali.
   static DateTime? parse(String raw) {
     final String value = raw.trim();
     if (value.isEmpty) return null;
     final DateTime? parsed = DateTime.tryParse(value);
     if (parsed == null) return null;
-    if (parsed.isUtc) return parsed.toLocal();
-    return parsed;
+
+    final DateTime utc = parsed.isUtc
+        ? parsed
+        : DateTime.utc(
+            parsed.year,
+            parsed.month,
+            parsed.day,
+            parsed.hour,
+            parsed.minute,
+            parsed.second,
+            parsed.millisecond,
+            parsed.microsecond,
+          );
+    final DateTime local = utc.toLocal();
+
+    if (kDebugMode) {
+      debugPrint('[NotificationTime] raw = $value');
+      debugPrint('[NotificationTime] parsedUtc = $utc');
+      debugPrint('[NotificationTime] local = $local');
+      debugPrint('[NotificationTime] now = ${DateTime.now()}');
+      debugPrint(
+        '[NotificationTime] difference = ${DateTime.now().difference(local)}',
+      );
+    }
+
+    return local;
   }
 
   static String relative(

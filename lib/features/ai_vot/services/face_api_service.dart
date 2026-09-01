@@ -8,7 +8,7 @@ import '../models/face_status.dart';
 
 /// Service untuk berkomunikasi dengan API Face Recognition backend SITARA.
 ///
-/// Memakai [ApiClient] yang memasang header Authorization: Bearer <token>
+/// Memakai [ApiClient] yang memasang header `Authorization: Bearer <token>`
 /// secara otomatis dari penyimpanan sesi lokal.
 class FaceApiService {
   FaceApiService({ApiClient? apiClient})

@@ -7,7 +7,7 @@ import '../models/face_verification_result.dart';
 
 /// Service untuk memanggil API Face Verification backend SITARA (POST /face/verify).
 ///
-/// Memakai [ApiClient] yang memasang header Authorization: Bearer <token>
+/// Memakai [ApiClient] yang memasang header `Authorization: Bearer <token>`
 /// secara otomatis dari penyimpanan sesi lokal.
 class FaceVerificationApiService {
   FaceVerificationApiService({ApiClient? apiClient})

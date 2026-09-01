@@ -54,7 +54,7 @@ class ReportSymptomCard extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: accentColor.withOpacity(.10),
+                color: accentColor.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(

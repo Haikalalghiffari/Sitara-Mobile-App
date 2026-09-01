@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sitara_app/features/ai_vot/models/face_verification_result.dart';
-import 'package:sitara_app/features/ai_vot/models/video_verification_request.dart';
-import 'package:sitara_app/features/ai_vot/models/video_verification_result.dart';
-import 'package:sitara_app/features/medicine/models/my_medicine_schedule.dart';
+import 'package:sitara/features/ai_vot/models/face_verification_result.dart';
+import 'package:sitara/features/ai_vot/models/video_verification_request.dart';
+import 'package:sitara/features/ai_vot/models/video_verification_result.dart';
+import 'package:sitara/features/medicine/models/my_medicine_schedule.dart';
 
 void main() {
   group('Phase 8B Video Verification Audit Trail Tests', () {
@@ -90,7 +90,7 @@ void main() {
 
     test('4. null verification result -> submission blocked', () {
       FaceVerificationResult? result;
-      expect(result == null, isTrue);
+      expect(result, isNull);
     });
 
     test('5. verified false -> submission blocked', () {

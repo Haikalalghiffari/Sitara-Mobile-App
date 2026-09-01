@@ -494,7 +494,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
                 children: [
                   const Text('Skor Kemiripan:'),
                   Text(
-                    '%',
+                    '${scorePercent.toStringAsFixed(1)}%',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
@@ -507,7 +507,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Ambang Batas (Threshold):'),
-                  Text('%'),
+                  Text('${thresholdPercent.toStringAsFixed(0)}%'),
                 ],
               ),
               const SizedBox(height: 6),
@@ -515,7 +515,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('ID Verifikasi Server:'),
-                  Text('#'),
+                  Text('#${res?.faceVerificationId ?? '-'}'),
                 ],
               ),
             ],
@@ -528,16 +528,13 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
           height: AppSpacing.buttonHeight + 4,
           child: FilledButton(
             onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AiVotPage(
-                  schedule: widget.schedule,
-                  verificationResult: _result,
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AiVotPage(),
                 ),
-              ),
-            );
-          },
+              );
+            },
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -618,7 +615,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
                   children: [
                     const Text('Skor Kemiripan:'),
                     Text(
-                      '%',
+                      '${scorePercent.toStringAsFixed(1)}%',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.red.shade700,
@@ -631,7 +628,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Ambang Batas (Threshold):'),
-                    Text('%'),
+                    Text('${thresholdPercent.toStringAsFixed(0)}%'),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -639,7 +636,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('ID Audit Log Server:'),
-                    Text('#'),
+                    Text('#${res.faceVerificationId}'),
                   ],
                 ),
               ],
@@ -671,17 +668,7 @@ class _MedicineVerificationPageState extends State<MedicineVerificationPage>
         ),
         const SizedBox(height: AppSpacing.md),
         OutlinedButton(
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AiVotPage(
-                  schedule: widget.schedule,
-                  verificationResult: _result,
-                ),
-              ),
-            );
-          },
+          onPressed: _onBack,
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, AppSpacing.buttonHeight),
             side: const BorderSide(color: AppColors.outlineVariant),

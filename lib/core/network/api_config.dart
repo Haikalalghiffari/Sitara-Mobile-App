@@ -54,8 +54,7 @@ class ApiEndpoints {
   static const String myControlSchedules = '/control-schedules/my';
 
   /// POST /complaints, mengirim keluhan baru. Sejak backend memakai
-  /// 
-equire_nakes_or_patient, endpoint ini dapat dipakai akun pasien.
+  /// require_nakes_or_patient, endpoint ini dapat dipakai akun pasien.
   static const String complaints = '/complaints';
 
   /// GET /complaints/my, riwayat keluhan milik pemegang token.
@@ -115,4 +114,7 @@ equire_nakes_or_patient, endpoint ini dapat dipakai akun pasien.
   /// `GET /vot/{daily_medication_id}`.
   static String votSession(int dailyMedicationId) =>
       '/vot/$dailyMedicationId';
+
+  /// `POST /video-verifications`.
+  static const String videoVerifications = '/video-verifications';
 }

@@ -84,7 +84,7 @@ class NotificationSettingTile extends StatelessWidget {
 
           Switch(
             value: enabled,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: AppColors.primary,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: AppColors.outline,

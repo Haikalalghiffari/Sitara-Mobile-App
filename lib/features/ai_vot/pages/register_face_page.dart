@@ -34,9 +34,7 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   final FaceService _faceService = FaceService();
   final AuthService _authService = AuthService();
 
-  _RegisterFaceStep _step = _RegisterFaceStep.checkingStatus;
-  FaceStatusResponse? _faceStatus;
-  String? _errorMessage;
+  _RegisterFaceStep _step = _RegisterFaceStep.capture;
 
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
@@ -52,7 +50,7 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkRegistrationStatus();
+    _initializeCamera();
   }
 
   @override
@@ -221,7 +219,7 @@ class _RegisterFacePageState extends State<RegisterFacePage>
     } on CameraException catch (exception) {
       if (!mounted) return;
       setState(() => _isCapturing = false);
-      _showMessage(exception.message ?? 'Gagal mengambil foto.');
+      _showMessage(exception.description ?? 'Gagal mengambil foto.');
     } catch (_) {
       if (!mounted) return;
       setState(() => _isCapturing = false);
@@ -232,18 +230,10 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   Future<void> _retake() async {
     await _deleteCapturedFile();
     if (!mounted) return;
-    await _startCameraRegistration();
-  }
-
-  Future<void> _uploadFace() async {
-    final String? path = _capturedPath;
-    if (path == null) return;
-
     setState(() {
-      _step = _RegisterFaceStep.uploading;
-      _errorMessage = null;
+      _capturedPath = null;
+      _step = _RegisterFaceStep.capture;
     });
-
     await _initializeCamera();
   }
 
@@ -264,12 +254,6 @@ class _RegisterFacePageState extends State<RegisterFacePage>
       );
 
       await _deleteCapturedFile();
-
-      if (!mounted) return;
-
-      // Refresh status dari backend (Source of Truth)
-      final FaceStatusResponse refreshedStatus =
-          await _faceApiService.getFaceStatus();
 
       if (!mounted) return;
 
@@ -298,6 +282,10 @@ class _RegisterFacePageState extends State<RegisterFacePage>
 
   void _onBack() {
     if (_isSaving || _isCapturing) return;
+    if (_step == _RegisterFaceStep.preview) {
+      unawaited(_retake());
+      return;
+    }
     if (_step == _RegisterFaceStep.success) {
       _popOnce(true);
       return;
@@ -318,9 +306,8 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _step == _RegisterFaceStep.statusOverview ||
-          _step == _RegisterFaceStep.success ||
-          _step == _RegisterFaceStep.checkingStatus,
+      canPop: _step == _RegisterFaceStep.capture ||
+          _step == _RegisterFaceStep.success,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           _onBack();
@@ -384,9 +371,10 @@ class _CaptureBody extends StatelessWidget {
     required this.step,
     required this.cameraStatus,
     required this.isCapturing,
+    required this.isSaving,
     required this.onRetryCamera,
     required this.onRetake,
-    required this.onUpload,
+    required this.onSave,
     this.controller,
     this.capturedPath,
     this.onCapture,
@@ -397,10 +385,11 @@ class _CaptureBody extends StatelessWidget {
   final CameraController? controller;
   final String? capturedPath;
   final bool isCapturing;
+  final bool isSaving;
   final VoidCallback onRetryCamera;
   final VoidCallback? onCapture;
   final VoidCallback onRetake;
-  final VoidCallback onUpload;
+  final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +461,7 @@ class _CaptureBody extends StatelessWidget {
             width: double.infinity,
             height: AppSpacing.buttonHeight + 4,
             child: OutlinedButton(
-              onPressed: onRetake,
+              onPressed: isSaving ? null : onRetake,
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary),
@@ -486,8 +475,9 @@ class _CaptureBody extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           _PrimaryButton(
-            label: 'Mendaftarkan Wajah',
-            onPressed: onUpload,
+            label: 'Daftarkan Wajah',
+            isLoading: isSaving,
+            onPressed: isSaving ? null : onSave,
           ),
         ] else
           _PrimaryButton(

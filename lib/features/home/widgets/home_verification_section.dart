@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/colors.dart';
-
-import '../../ai_vot/pages/medicine_verification_page.dart';
-import '../../medicine/models/my_medicine_schedule.dart';
+import '../../ai_vot/pages/ai_vot_page.dart';
 
 class HomeVerificationSection extends StatelessWidget {
   const HomeVerificationSection({

@@ -70,7 +70,7 @@ class NotificationMasterSwitch extends StatelessWidget {
 
           Switch(
             value: value,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: AppColors.primaryContainer,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.white30,

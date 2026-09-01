@@ -80,8 +80,8 @@ class NotificationModel {
 
   /// Waktu pembuatan dalam zona waktu perangkat.
   ///
-  /// Offset/`Z` diubah ke local sekali. String tanpa zona dipakai sebagai
-  /// jam dinding lokal, tanpa konversi kedua.
+  /// Backend menyimpan `created_at` sebagai UTC. Offset/`Z` dan string naive
+  /// sama-sama dipahami sebagai UTC, lalu diubah ke local sekali.
   DateTime? get createdAtDateTime => NotificationTime.parse(createdAt);
 
   @override
