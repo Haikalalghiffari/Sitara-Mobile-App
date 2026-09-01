@@ -11,7 +11,7 @@ class MedicineHeaderSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          "Logistik Obat",
+          "Informasi Obat",
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: AppColors.primary,
                 fontWeight: FontWeight.bold,
@@ -21,7 +21,7 @@ class MedicineHeaderSection extends StatelessWidget {
         const SizedBox(height: 8),
 
         Text(
-          "Kelola stok dan jadwal pengambilan obat Anda.",
+          "Informasi terkait kontrol kesehatan Anda dan stok obat yang tersedia.",
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: AppColors.textSecondary,
               ),

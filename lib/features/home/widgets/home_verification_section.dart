@@ -8,10 +8,11 @@ import '../../medicine/models/my_medicine_schedule.dart';
 class HomeVerificationSection extends StatelessWidget {
   const HomeVerificationSection({
     super.key,
-    this.schedule,
+    this.onVotClosed,
   });
 
-  final MyMedicineSchedule? schedule;
+  /// Dipanggil setelah halaman AI-VOT ditutup, tanpa mengganti rute Home.
+  final VoidCallback? onVotClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -67,23 +68,15 @@ class HomeVerificationSection extends StatelessWidget {
             width: double.infinity,
             height: 52,
             child: ElevatedButton.icon(
-              onPressed: () {
-                if (schedule != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => MedicineVerificationPage(schedule: schedule!),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Pilih obat aktif terlebih dahulu untuk memverifikasi wajah.',
-                      ),
-                    ),
-                  );
-                }
+              onPressed: () async {
+                await Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    settings: const RouteSettings(name: '/ai-vot'),
+                    builder: (_) => const AiVotPage(),
+                  ),
+                );
+                onVotClosed?.call();
               },
               icon: const Icon(Icons.camera_alt_outlined),
               label: const Text("Buka Kamera"),

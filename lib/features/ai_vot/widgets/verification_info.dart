@@ -3,13 +3,21 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
-/// Keterangan privasi dan status fitur di bawah tombol utama.
 class VerificationInfo extends StatelessWidget {
-  const VerificationInfo({super.key});
+  const VerificationInfo({
+    super.key,
+    this.medicineName,
+    this.scheduleMessage,
+  });
+
+  final String? medicineName;
+  final String? scheduleMessage;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final String? name = medicineName?.trim();
+    final String? schedule = scheduleMessage?.trim();
 
     return Column(
       children: [
@@ -21,12 +29,10 @@ class VerificationInfo extends StatelessWidget {
               size: AppSpacing.iconSm,
               color: AppColors.textSecondary,
             ),
-
             const SizedBox(width: AppSpacing.sm),
-
             Flexible(
               child: Text(
-                "Video digunakan untuk validasi pengobatan.",
+                "Foto wajah dan obat dikirim ke server. Proses minum dinilai di perangkat.",
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -34,16 +40,26 @@ class VerificationInfo extends StatelessWidget {
             ),
           ],
         ),
-
-        const SizedBox(height: AppSpacing.xs),
-
-        Text(
-          "Model AI belum terhubung dan hasil verifikasi belum dapat dikirim ke petugas.",
-          textAlign: TextAlign.center,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: AppColors.textDisabled,
+        if (schedule != null && schedule.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            schedule,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
-        ),
+        ],
+        if (name != null && name.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            "Jadwal hari ini: $name",
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.textDisabled,
+            ),
+          ),
+        ],
       ],
     );
   }

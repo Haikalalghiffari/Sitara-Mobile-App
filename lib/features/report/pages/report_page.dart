@@ -26,7 +26,16 @@ import '../../medicine/pages/medicine_page.dart';
 import '../../profile/pages/profile_page.dart';
 
 class ReportPage extends StatefulWidget {
-  const ReportPage({super.key});
+  const ReportPage({
+    super.key,
+    this.highlightedComplaintId,
+  });
+
+  /// `complaint_id` dari `notification.reference_id`.
+  ///
+  /// Dicocokkan dengan hasil `GET /complaints/my`. Null bila halaman dibuka
+  /// dari tombol lapor di beranda.
+  final int? highlightedComplaintId;
 
   @override
   State<ReportPage> createState() => _ReportPageState();
@@ -62,6 +71,7 @@ class _ReportPageState extends State<ReportPage> {
   List<Complaint> _complaints = <Complaint>[];
   bool _isLoadingComplaints = true;
   String? _complaintError;
+  bool _didRetryHighlight = false;
 
   List<MyTreatment> _treatments = <MyTreatment>[];
   bool _isSubmitting = false;
@@ -98,6 +108,8 @@ class _ReportPageState extends State<ReportPage> {
         _complaintError = null;
         _isLoadingComplaints = false;
       });
+
+      await _retryHighlightIfMissing();
     } on ApiException catch (error) {
       if (!mounted) return;
 
@@ -120,6 +132,30 @@ class _ReportPageState extends State<ReportPage> {
         _isLoadingComplaints = false;
       });
     }
+  }
+
+  /// Satu penyegaran tambahan lewat `GET /complaints/my` bila id dari
+  /// notifikasi belum ada di daftar. Tidak mengarang keluhan.
+  Future<void> _retryHighlightIfMissing() async {
+    final int? highlightedId = widget.highlightedComplaintId;
+    if (highlightedId == null || highlightedId <= 0) return;
+    if (_didRetryHighlight) return;
+    if (Complaint.findById(_complaints, highlightedId) != null) return;
+
+    _didRetryHighlight = true;
+    await _loadComplaints();
+  }
+
+  List<Complaint> get _visibleComplaints {
+    final Complaint? highlighted = Complaint.findById(
+      _complaints,
+      widget.highlightedComplaintId,
+    );
+    if (highlighted == null) return _complaints;
+    return <Complaint>[
+      highlighted,
+      ..._complaints.where((Complaint item) => item.id != highlighted.id),
+    ];
   }
 
   /// Dipakai hanya untuk memperoleh `treatment_id` milik pasien saat mengirim
@@ -452,7 +488,9 @@ class _ReportPageState extends State<ReportPage> {
                             const SizedBox(height: 32),
 
                             ReportHistorySection(
-                              complaints: _complaints,
+                              complaints: _visibleComplaints,
+                              highlightedComplaintId:
+                                  widget.highlightedComplaintId,
                               isLoading: _isLoadingComplaints,
                               errorMessage: _complaintError,
                               onRetry: _loadComplaints,

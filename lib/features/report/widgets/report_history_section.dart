@@ -15,12 +15,14 @@ class ReportHistorySection extends StatelessWidget {
   const ReportHistorySection({
     super.key,
     this.complaints = const <Complaint>[],
+    this.highlightedComplaintId,
     this.isLoading = false,
     this.errorMessage,
     this.onRetry,
   });
 
   final List<Complaint> complaints;
+  final int? highlightedComplaintId;
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback? onRetry;
@@ -130,6 +132,7 @@ class ReportHistorySection extends StatelessWidget {
     final String? statusLabel = complaint.statusLabel;
     final String? dateLabel = complaint.createdAtLabel;
     final String? reply = complaint.responseText;
+    final bool highlighted = complaint.id == highlightedComplaintId;
 
     return Container(
       width: double.infinity,
@@ -138,7 +141,8 @@ class ReportHistorySection extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: AppRadius.card,
         border: Border.all(
-          color: AppColors.outlineVariant,
+          color: highlighted ? AppColors.primary : AppColors.outlineVariant,
+          width: highlighted ? 2 : 1,
         ),
       ),
       child: Column(

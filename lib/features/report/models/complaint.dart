@@ -77,6 +77,18 @@ class Complaint {
   /// `13 Agustus 2026`, null bila `created_at` tidak dapat dibaca.
   String? get createdAtLabel => formatIndonesianDate(createdAtDateTime);
 
+  /// Mencari keluhan milik pasien dari `GET /complaints/my`.
+  ///
+  /// Tidak memanggil `GET /complaints/{id}` (hanya nakes). Null bila [id]
+  /// tidak ada atau tidak ditemukan di daftar.
+  static Complaint? findById(List<Complaint> items, int? id) {
+    if (id == null || id <= 0) return null;
+    for (final Complaint item in items) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
   /// Balasan nakes yang layak ditampilkan, null bila kosong.
   String? get responseText {
     final String? text = response?.trim();

@@ -1,32 +1,27 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
+import '../../login/pages/login_page.dart';
+import '../../login/services/auth_service.dart';
 import '../models/camera_status.dart';
-import '../models/face_status.dart';
-import '../services/face_api_service.dart';
-import '../storage/face_registration_storage.dart';
+import '../models/face_register_result.dart';
+import '../services/face_service.dart';
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/register_face_camera_frame.dart';
 
-enum _RegisterFaceStep {
-  checkingStatus,
-  statusOverview,
-  capture,
-  preview,
-  uploading,
-  success,
-}
+enum _RegisterFaceStep { capture, preview, success }
 
-/// Halaman Pendaftaran Wajah Pasien SITARA.
+/// Pendaftaran wajah ke backend `POST /face/register`.
 ///
-/// Berkomunikasi dengan backend SITARA (GET /face/status dan POST /face/register).
-/// Database backend adalah source of truth utama.
+/// Sukses hanya ditampilkan bila server mengembalikan `status: success`.
 class RegisterFacePage extends StatefulWidget {
   const RegisterFacePage({super.key});
 
@@ -36,8 +31,8 @@ class RegisterFacePage extends StatefulWidget {
 
 class _RegisterFacePageState extends State<RegisterFacePage>
     with WidgetsBindingObserver {
-  final FaceApiService _faceApiService = FaceApiService();
-  final FaceRegistrationStorage _storage = FaceRegistrationStorage();
+  final FaceService _faceService = FaceService();
+  final AuthService _authService = AuthService();
 
   _RegisterFaceStep _step = _RegisterFaceStep.checkingStatus;
   FaceStatusResponse? _faceStatus;
@@ -46,7 +41,12 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   CameraController? _cameraController;
   CameraStatus _cameraStatus = CameraStatus.initializing;
   String? _capturedPath;
+  String? _successMessage;
   bool _isCapturing = false;
+  bool _isSaving = false;
+  bool _didPop = false;
+  int _cameraEpoch = 0;
+  Future<void>? _lifecycleGate;
 
   @override
   void initState() {
@@ -58,72 +58,44 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _cameraController?.dispose();
+    final CameraController? controller = _cameraController;
+    _cameraController = null;
+    unawaited(controller?.dispose() ?? Future<void>.value());
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? controller = _cameraController;
-
-    if (state == AppLifecycleState.inactive) {
-      if (controller != null && _step == _RegisterFaceStep.capture) {
-        _releaseCamera();
-      }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _lifecycleGate = _handleBackground();
       return;
     }
 
-    if (state == AppLifecycleState.resumed &&
-        controller == null &&
-        _step == _RegisterFaceStep.capture) {
-      _initializeCamera();
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_handleForeground());
     }
   }
 
-  /// Mengecek status pendaftaran wajah langsung ke backend database (Source of Truth).
-  Future<void> _checkRegistrationStatus() async {
-    setState(() {
-      _step = _RegisterFaceStep.checkingStatus;
-      _errorMessage = null;
-    });
-
-    try {
-      final FaceStatusResponse status = await _faceApiService.getFaceStatus();
-      if (!mounted) return;
-
-      setState(() {
-        _faceStatus = status;
-        _step = _RegisterFaceStep.statusOverview;
-      });
-
-      if (status.isRegistered) {
-        await _storage.markRegistered();
-      }
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = error.message;
-        _step = _RegisterFaceStep.statusOverview;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = ApiException.unexpectedMessage;
-        _step = _RegisterFaceStep.statusOverview;
-      });
+  Future<void> _handleBackground() async {
+    if (_cameraController != null && _step == _RegisterFaceStep.capture) {
+      await _releaseCamera();
     }
   }
 
-  Future<void> _startCameraRegistration() async {
-    setState(() {
-      _step = _RegisterFaceStep.capture;
-      _capturedPath = null;
-      _errorMessage = null;
-    });
-    await _initializeCamera();
+  Future<void> _handleForeground() async {
+    await _lifecycleGate;
+    if (!mounted || _didPop) return;
+    if (_cameraController == null && _step == _RegisterFaceStep.capture) {
+      await _initializeCamera();
+    }
   }
 
-  Future<void> _releaseCamera() async {
+  Future<void> _releaseCamera({bool invalidateInFlight = true}) async {
+    if (invalidateInFlight) {
+      _cameraEpoch++;
+    }
     final CameraController? controller = _cameraController;
     _cameraController = null;
 
@@ -135,10 +107,19 @@ class _RegisterFacePageState extends State<RegisterFacePage>
   }
 
   Future<void> _initializeCamera() async {
-    await _releaseCamera();
+    final CameraController? existing = _cameraController;
+    if (existing != null &&
+        existing.value.isInitialized &&
+        _cameraStatus.isReady) {
+      return;
+    }
+
+    final int epoch = ++_cameraEpoch;
+    await _releaseCamera(invalidateInFlight: false);
 
     try {
       final List<CameraDescription> cameras = await availableCameras();
+      if (epoch != _cameraEpoch) return;
 
       if (cameras.isEmpty) {
         if (!mounted) return;
@@ -160,7 +141,7 @@ class _RegisterFacePageState extends State<RegisterFacePage>
 
       await controller.initialize();
 
-      if (!mounted) {
+      if (!mounted || epoch != _cameraEpoch) {
         await controller.dispose();
         return;
       }
@@ -170,28 +151,41 @@ class _RegisterFacePageState extends State<RegisterFacePage>
         _cameraStatus = CameraStatus.ready;
       });
     } on CameraException catch (exception) {
-      if (!mounted) return;
-      setState(() => _cameraStatus = _mapCameraException(exception));
+      if (!mounted || epoch != _cameraEpoch) return;
+      setState(
+        () => _cameraStatus = cameraStatusFromExceptionCode(exception.code),
+      );
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || epoch != _cameraEpoch) return;
       setState(() => _cameraStatus = CameraStatus.unavailable);
     }
   }
 
-  CameraStatus _mapCameraException(CameraException exception) {
-    return switch (exception.code) {
-      'CameraAccessDenied' ||
-      'CameraAccessDeniedWithoutPrompt' ||
-      'CameraAccessRestricted' =>
-        CameraStatus.permissionDenied,
-      _ => CameraStatus.unavailable,
-    };
+  Future<void> _retryCamera() async {
+    if (_cameraStatus.needsAppSettings) {
+      await openAppSettings();
+      return;
+    }
+    await _initializeCamera();
   }
 
-  void _showMessage(String message) {
+  Future<void> _handleExpiredSession() async {
+    await _authService.logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
+  }
+
+  void _showMessage(String message, {Color? backgroundColor}) {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    messenger.showSnackBar(
+      SnackBar(backgroundColor: backgroundColor, content: Text(message)),
+    );
   }
 
   Future<void> _deleteCapturedFile() async {
@@ -250,9 +244,25 @@ class _RegisterFacePageState extends State<RegisterFacePage>
       _errorMessage = null;
     });
 
+    await _initializeCamera();
+  }
+
+  Future<void> _save() async {
+    if (_isSaving) return;
+
+    final String? path = _capturedPath;
+    if (path == null || path.isEmpty) {
+      _showMessage("Foto wajah belum tersedia. Silakan ambil ulang.");
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
     try {
-      await _faceApiService.registerFace(path);
-      await _storage.markRegistered();
+      final FaceRegisterResult result = await _faceService.registerFace(
+        imagePath: path,
+      );
+
       await _deleteCapturedFile();
 
       if (!mounted) return;
@@ -264,36 +274,45 @@ class _RegisterFacePageState extends State<RegisterFacePage>
       if (!mounted) return;
 
       setState(() {
-        _faceStatus = refreshedStatus;
+        _capturedPath = null;
+        _successMessage = result.message;
         _step = _RegisterFaceStep.success;
+        _isSaving = false;
       });
     } on ApiException catch (error) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = error.message;
-        _step = _RegisterFaceStep.preview;
-      });
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() => _isSaving = false);
       _showMessage(error.message);
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = ApiException.unexpectedMessage;
-        _step = _RegisterFaceStep.preview;
-      });
+      setState(() => _isSaving = false);
       _showMessage(ApiException.unexpectedMessage);
     }
   }
 
   void _onBack() {
-    if (_step == _RegisterFaceStep.capture || _step == _RegisterFaceStep.preview) {
-      _releaseCamera();
-      _deleteCapturedFile();
-      setState(() {
-        _step = _RegisterFaceStep.statusOverview;
-      });
+    if (_isSaving || _isCapturing) return;
+    if (_step == _RegisterFaceStep.success) {
+      _popOnce(true);
       return;
     }
-    Navigator.pop(context, _faceStatus?.isRegistered ?? false);
+    _popOnce(false);
+  }
+
+  void _continueToVerification() {
+    _popOnce(true);
+  }
+
+  void _popOnce(bool result) {
+    if (_didPop) return;
+    _didPop = true;
+    Navigator.pop(context, result);
   }
 
   @override
@@ -310,8 +329,7 @@ class _RegisterFacePageState extends State<RegisterFacePage>
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
+          child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: AppSpacing.contentMaxWidth,
@@ -322,14 +340,32 @@ class _RegisterFacePageState extends State<RegisterFacePage>
                 ),
                 child: Column(
                   children: [
-                    AiVotTopBar(
-                      title: 'Pendaftaran Wajah',
-                      onBack: _onBack,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
+                    AiVotTopBar(title: "Daftar Wajah", onBack: _onBack),
+                    const SizedBox(height: AppSpacing.lg),
                     Expanded(
                       child: SingleChildScrollView(
-                        child: _buildBodyContent(),
+                        child: _step == _RegisterFaceStep.success
+                            ? _SuccessBody(
+                                message:
+                                    _successMessage ??
+                                    "Wajah pasien berhasil didaftarkan.",
+                                onContinue: _continueToVerification,
+                              )
+                            : _CaptureBody(
+                                step: _step,
+                                cameraStatus: _cameraStatus,
+                                controller: _cameraController,
+                                capturedPath: _capturedPath,
+                                isCapturing: _isCapturing,
+                                isSaving: _isSaving,
+                                onRetryCamera: _retryCamera,
+                                onCapture:
+                                    _cameraStatus.isReady && !_isCapturing
+                                    ? _capture
+                                    : null,
+                                onRetake: _retake,
+                                onSave: _save,
+                              ),
                       ),
                     ),
                   ],
@@ -338,236 +374,6 @@ class _RegisterFacePageState extends State<RegisterFacePage>
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBodyContent() {
-    switch (_step) {
-      case _RegisterFaceStep.checkingStatus:
-        return const Padding(
-          padding: EdgeInsets.symmetric(vertical: 80.0),
-          child: Column(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: AppSpacing.lg),
-              Text(
-                'Memeriksa status pendaftaran wajah...',
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        );
-
-      case _RegisterFaceStep.statusOverview:
-        return _StatusOverviewBody(
-          status: _faceStatus,
-          errorMessage: _errorMessage,
-          onRefresh: _checkRegistrationStatus,
-          onStartRegistration: _startCameraRegistration,
-        );
-
-      case _RegisterFaceStep.capture:
-      case _RegisterFaceStep.preview:
-        return _CaptureBody(
-          step: _step,
-          cameraStatus: _cameraStatus,
-          controller: _cameraController,
-          capturedPath: _capturedPath,
-          isCapturing: _isCapturing,
-          onRetryCamera: _initializeCamera,
-          onCapture: _cameraStatus.isReady && !_isCapturing ? _capture : null,
-          onRetake: _retake,
-          onUpload: _uploadFace,
-        );
-
-      case _RegisterFaceStep.uploading:
-        return const Padding(
-          padding: EdgeInsets.symmetric(vertical: 80.0),
-          child: Column(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: AppSpacing.lg),
-              Text(
-                'Mendaftarkan wajah ke server SITARA...',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              SizedBox(height: AppSpacing.sm),
-              Text(
-                'Harap tunggu sebentar, backend sedang mengekstrak vektor fitur wajah.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        );
-
-      case _RegisterFaceStep.success:
-        return _SuccessBody(
-          onContinue: () {
-            Navigator.pop(context, true);
-          },
-        );
-    }
-  }
-}
-
-class _StatusOverviewBody extends StatelessWidget {
-  const _StatusOverviewBody({
-    required this.status,
-    required this.errorMessage,
-    required this.onRefresh,
-    required this.onStartRegistration,
-  });
-
-  final FaceStatusResponse? status;
-  final String? errorMessage;
-  final VoidCallback onRefresh;
-  final VoidCallback onStartRegistration;
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isRegistered = status?.isRegistered ?? false;
-
-    return Column(
-      children: [
-        const SizedBox(height: AppSpacing.lg),
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: isRegistered
-                ? AppColors.primaryContainer
-                : AppColors.surface,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isRegistered ? AppColors.primary : AppColors.outlineVariant,
-              width: 2,
-            ),
-          ),
-          child: Icon(
-            isRegistered
-                ? Icons.check_circle_outline_rounded
-                : Icons.face_retouching_natural_outlined,
-            color: isRegistered ? AppColors.primary : AppColors.textHint,
-            size: 44,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        Text(
-          isRegistered
-              ? '✓ Wajah Sudah Terdaftar'
-              : 'Wajah Belum Terdaftar',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isRegistered ? AppColors.primary : AppColors.textPrimary,
-              ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          isRegistered
-              ? 'Data wajah Anda sudah tersimpan di database SITARA dan aktif digunakan untuk verifikasi minum obat.'
-              : 'Daftarkan foto wajah Anda untuk memverifikasi identitas pasien sebelum melakukan observasi minum obat.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.5,
-              ),
-        ),
-        if (errorMessage != null) ...[
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: AppRadius.card,
-              border: Border.all(color: Colors.red.shade200),
-            ),
-            child: Text(
-              errorMessage!,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.red.shade800, fontSize: 14),
-            ),
-          ),
-        ],
-        const SizedBox(height: AppSpacing.xxl),
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.cardPadding),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: AppRadius.card,
-            border: Border.all(color: AppColors.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Petunjuk Pendaftaran Wajah:',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              const _BulletPoint('Pastikan posisi wajah berada di dalam bingkai panduan.'),
-              const _BulletPoint('Gunakan pencahayaan ruangan yang cukup terang.'),
-              const _BulletPoint('Pastikan hanya ada SATU wajah di dalam foto.'),
-              const _BulletPoint('Lepas kacamata hitam, masker, atau penutup wajah.'),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xxl),
-        _PrimaryButton(
-          label: isRegistered ? 'Daftarkan Ulang Wajah' : 'Daftarkan Wajah',
-          onPressed: onStartRegistration,
-        ),
-        const SizedBox(height: AppSpacing.md),
-        OutlinedButton(
-          onPressed: onRefresh,
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, AppSpacing.buttonHeight),
-            side: const BorderSide(color: AppColors.outlineVariant),
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
-          ),
-          child: const Text('Cek Ulang Status Database'),
-        ),
-        const SizedBox(height: AppSpacing.xl),
-      ],
-    );
-  }
-}
-
-class _BulletPoint extends StatelessWidget {
-  const _BulletPoint(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -602,7 +408,47 @@ class _CaptureBody extends StatelessWidget {
 
     return Column(
       children: [
+        Container(
+          width: 72,
+          height: 72,
+          decoration: const BoxDecoration(
+            color: AppColors.primaryContainer,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.face_retouching_natural_outlined,
+            color: AppColors.primary,
+            size: 36,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          "Daftarkan Wajah",
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          "Daftarkan wajah Anda terlebih dahulu untuk proses verifikasi saat minum obat.",
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
         const SizedBox(height: AppSpacing.md),
+        Text(
+          "Wajah Anda akan digunakan untuk verifikasi identitas saat melakukan video observasi terapi.",
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: AppColors.textSecondary,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xxl),
         RegisterFaceCameraFrame(
           cameraStatus: cameraStatus,
           controller: controller,
@@ -616,9 +462,9 @@ class _CaptureBody extends StatelessWidget {
               : 'Posisikan wajah Anda di dalam lingkaran panduan',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
         ),
         const SizedBox(height: AppSpacing.xxl),
         if (isPreview) ...[
@@ -630,16 +476,11 @@ class _CaptureBody extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: AppRadius.button,
-                ),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
               ),
               child: const Text(
-                'Ambil Ulang',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                "Ambil Ulang",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -661,8 +502,9 @@ class _CaptureBody extends StatelessWidget {
 }
 
 class _SuccessBody extends StatelessWidget {
-  const _SuccessBody({required this.onContinue});
+  const _SuccessBody({required this.message, required this.onContinue});
 
+  final String message;
   final VoidCallback onContinue;
 
   @override
@@ -685,21 +527,12 @@ class _SuccessBody extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xl),
         Text(
-          'Wajah berhasil didaftarkan ke server SITARA.',
+          message,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Text(
-          'Data vektor embedding wajah Anda telah tersimpan secara aman di database server SITARA dan siap digunakan untuk verifikasi minum obat.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
-                height: 1.5,
-              ),
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
         ),
         const SizedBox(height: AppSpacing.xxl),
         _PrimaryButton(
@@ -735,9 +568,7 @@ class _PrimaryButton extends StatelessWidget {
           disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
           disabledForegroundColor: Colors.white,
           elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: AppRadius.button,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
         ),
         child: isLoading
             ? const SizedBox(

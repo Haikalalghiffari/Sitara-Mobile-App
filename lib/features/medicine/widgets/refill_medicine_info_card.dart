@@ -172,17 +172,19 @@ class RefillMedicineInfoCard extends StatelessWidget {
     return dosage;
   }
 
-  /// Chip status memakai label dari backend. Bila pasien belum pernah mengirim
-  /// permintaan, atau nilai `status` di luar `RefillRequestStatus`, warna netral
-  /// dipakai agar tidak terbaca sebagai status yang datang dari server.
+  /// Chip status hanya tampil jika ada permintaan di server.
+  /// Tanpa riwayat, tidak ditampilkan agar tidak terlihat seperti proses aktif.
   Widget _statusChip(BuildContext context) {
     final Refill? refill = latestRefill;
     final String? label = refill?.statusLabel;
+    if (refill == null || label == null) {
+      return const SizedBox.shrink();
+    }
 
     final Color background;
     final Color foreground;
 
-    switch (refill?.status.toLowerCase()) {
+    switch (refill.status.toLowerCase()) {
       case 'pending':
         background = AppColors.warningContainer;
         foreground = AppColors.onWarningContainer;
@@ -196,8 +198,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
         foreground = AppColors.onErrorContainer;
         break;
       default:
-        background = AppColors.surfaceContainerHigh;
-        foreground = AppColors.textSecondary;
+        return const SizedBox.shrink();
     }
 
     return Container(
@@ -210,7 +211,7 @@ class RefillMedicineInfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(30),
       ),
       child: Text(
-        "Status:\n${label ?? "Belum ada permintaan"}",
+        "Status:\n$label",
         textAlign: TextAlign.center,
         style: TextStyle(
           color: foreground,

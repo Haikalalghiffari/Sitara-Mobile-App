@@ -6,15 +6,13 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 import '../models/camera_status.dart';
 import '../models/verification_state.dart';
+import '../models/vot_medicine_detect_result.dart';
+import '../utils/bounding_box_mapper.dart';
 import 'camera_frame_guide.dart';
+import 'medicine_bounding_box_overlay.dart';
 import 'medicine_detection_area.dart';
 import 'verification_status.dart';
 
-/// Area kamera beserta seluruh overlay panduan.
-///
-/// Menampilkan live feed dari kamera perangkat. Overlay panduan hanya
-/// ditampilkan ketika kamera sudah benar-benar siap agar tidak menutupi
-/// pesan status atau error.
 class VerificationCameraView extends StatelessWidget {
   const VerificationCameraView({
     super.key,
@@ -22,18 +20,24 @@ class VerificationCameraView extends StatelessWidget {
     required this.cameraStatus,
     this.controller,
     this.onRetryCamera,
+    this.detectionBox,
+    this.capturedImageSize,
+    this.detectionLabel,
+    this.isFrontCamera = true,
   });
 
   final VerificationState state;
   final CameraStatus cameraStatus;
   final CameraController? controller;
   final VoidCallback? onRetryCamera;
+  final MedicineBoundingBox? detectionBox;
+  final Size? capturedImageSize;
+  final String? detectionLabel;
+  final bool isFrontCamera;
 
   bool get _isPreviewVisible {
     final camera = controller;
-    return cameraStatus.isReady &&
-        camera != null &&
-        camera.value.isInitialized;
+    return cameraStatus.isReady && camera != null && camera.value.isInitialized;
   }
 
   @override
@@ -42,78 +46,97 @@ class VerificationCameraView extends StatelessWidget {
       borderRadius: AppRadius.cardLarge,
       child: ColoredBox(
         color: AppColors.inverseSurface,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (_isPreviewVisible)
-              _CameraPreviewLayer(controller: controller!)
-            else
-              _CameraStatusLayer(
-                status: cameraStatus,
-                onRetry: onRetryCamera,
-              ),
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final Size previewSize = Size(
+              constraints.maxWidth,
+              constraints.maxHeight,
+            );
 
-            if (_isPreviewVisible) ...[
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: CameraFrameGuide(
-                  color: state.isProcessing
-                      ? AppColors.primaryLight
-                      : AppColors.primaryLight.withValues(alpha: 0.7),
-                ),
-              ),
+            final Rect? mappedBox =
+                detectionBox == null || capturedImageSize == null
+                ? null
+                : BoundingBoxMapper.toPreview(
+                    box: detectionBox!,
+                    imageSize: capturedImageSize!,
+                    previewSize: previewSize,
+                    mirrorHorizontally: isFrontCamera,
+                  );
 
-              Align(
-                alignment: const Alignment(0, 0.45),
-                child: MedicineDetectionArea(
-                  highlighted: state == VerificationState.detectingMedicine,
-                ),
-              ),
-
-              Positioned(
-                left: AppSpacing.lg,
-                right: AppSpacing.lg,
-                bottom: AppSpacing.lg,
-                child: _InstructionBanner(state: state),
-              ),
-            ],
-
-            Positioned(
-              top: AppSpacing.lg,
-              left: AppSpacing.lg,
-              right: AppSpacing.lg,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  VerificationStepIndicator(state: state),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: VerificationStatusPill(
-                        state: state,
-                        overrideLabel: cameraStatus.isReady
-                            ? null
-                            : cameraStatus.statusLabel,
-                        overrideColor: cameraStatus.isReady
-                            ? null
-                            : cameraStatusColor(cameraStatus),
-                      ),
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_isPreviewVisible)
+                  _CameraPreviewLayer(controller: controller!)
+                else
+                  _CameraStatusLayer(
+                    status: cameraStatus,
+                    onRetry: onRetryCamera,
+                  ),
+                if (_isPreviewVisible) ...[
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: CameraFrameGuide(
+                      color: state.isProcessing
+                          ? AppColors.primaryLight
+                          : AppColors.primaryLight.withValues(alpha: 0.7),
                     ),
                   ),
+                  if (state.showsMedicineGuide)
+                    const Align(
+                      alignment: Alignment(0, 0.45),
+                      child: MedicineDetectionArea(
+                        label: "Letakkan obat di dalam kotak",
+                        highlighted: true,
+                      ),
+                    ),
+                  if (mappedBox != null)
+                    MedicineBoundingBoxOverlay(
+                      rect: mappedBox,
+                      label: detectionLabel,
+                    ),
+                  Positioned(
+                    left: AppSpacing.lg,
+                    right: AppSpacing.lg,
+                    bottom: AppSpacing.lg,
+                    child: _InstructionBanner(state: state),
+                  ),
                 ],
-              ),
-            ),
-          ],
+                Positioned(
+                  top: AppSpacing.lg,
+                  left: AppSpacing.lg,
+                  right: AppSpacing.lg,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      VerificationStepIndicator(state: state),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: VerificationStatusPill(
+                            state: state,
+                            overrideLabel: cameraStatus.isReady
+                                ? null
+                                : cameraStatus.statusLabel,
+                            overrideColor: cameraStatus.isReady
+                                ? null
+                                : cameraStatusColor(cameraStatus),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// Live preview kamera.
-///
-/// Ukuran preview disesuaikan agar mengisi area tanpa terdistorsi.
 class _CameraPreviewLayer extends StatelessWidget {
   const _CameraPreviewLayer({required this.controller});
 
@@ -131,8 +154,6 @@ class _CameraPreviewLayer extends StatelessWidget {
       child: FittedBox(
         fit: BoxFit.cover,
         child: SizedBox(
-          // previewSize dilaporkan dalam orientasi landscape,
-          // jadi sisinya ditukar untuk tampilan portrait.
           width: previewSize.height,
           height: previewSize.width,
           child: CameraPreview(controller),
@@ -142,7 +163,6 @@ class _CameraPreviewLayer extends StatelessWidget {
   }
 }
 
-/// Tampilan ketika kamera sedang disiapkan atau gagal digunakan.
 class _CameraStatusLayer extends StatelessWidget {
   const _CameraStatusLayer({required this.status, this.onRetry});
 
@@ -160,10 +180,7 @@ class _CameraStatusLayer extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.inverseSurface,
-            AppColors.primaryDark,
-          ],
+          colors: [AppColors.inverseSurface, AppColors.primaryDark],
         ),
       ),
       child: Center(
@@ -183,15 +200,14 @@ class _CameraStatusLayer extends StatelessWidget {
                 )
               else
                 Icon(
-                  status == CameraStatus.permissionDenied
+                  status == CameraStatus.permissionDenied ||
+                          status == CameraStatus.permissionPermanentlyDenied
                       ? Icons.no_photography_outlined
                       : Icons.videocam_off_outlined,
                   size: AppSpacing.iconXl,
                   color: Colors.white.withValues(alpha: 0.6),
                 ),
-
               const SizedBox(height: AppSpacing.lg),
-
               Text(
                 status.statusLabel,
                 textAlign: TextAlign.center,
@@ -200,9 +216,7 @@ class _CameraStatusLayer extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-
               const SizedBox(height: AppSpacing.sm),
-
               Text(
                 status.description,
                 textAlign: TextAlign.center,
@@ -210,7 +224,6 @@ class _CameraStatusLayer extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.7),
                 ),
               ),
-
               if (!isBusy) ...[
                 const SizedBox(height: AppSpacing.xl),
                 FilledButton.icon(
@@ -219,7 +232,7 @@ class _CameraStatusLayer extends StatelessWidget {
                     Icons.refresh_rounded,
                     size: AppSpacing.iconMd,
                   ),
-                  label: const Text("Coba Lagi"),
+                  label: Text(status.retryLabel),
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primary,
@@ -260,10 +273,12 @@ class _InstructionBanner extends StatelessWidget {
       child: Text(
         state.instruction,
         textAlign: TextAlign.center,
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

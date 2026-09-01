@@ -30,8 +30,10 @@ class ApiEndpoints {
   static const String login = '/auth/login';
   static const String profile = '/auth/profile';
 
-  /// PUT /auth/change-password, body current_password dan 
-ew_password.
+  /// `POST /auth/activate`, body `token` dan `new_password`. Tanpa Bearer.
+  static const String activate = '/auth/activate';
+
+  /// `PUT /auth/change-password`, body `current_password` dan `new_password`.
   static const String changePassword = '/auth/change-password';
 
   static const String patientProfile = '/patients/profile';
@@ -83,18 +85,34 @@ equire_nakes_or_patient, endpoint ini dapat dipakai akun pasien.
   /// Backend tidak menyediakan penghapusan massal, hanya per notifikasi.
   static String notification(int id) => '/notifications/';
 
-  /// PUT /notifications/{notification_id}/read, tanpa request body.
-  static String notificationRead(int id) => '/notifications//read';
+  /// `PUT /notifications/{notification_id}/read`, tanpa request body.
+  static String notificationRead(int id) => '/notifications/$id/read';
 
-  /// GET /face/status, mengecek status pendaftaran wajah pasien terautentikasi.
-  static const String faceStatus = '/face/status';
-
-  /// POST /face/register, mendaftarkan wajah pasien (multipart image).
+  /// `POST /face/register`, multipart field `image`.
   static const String faceRegister = '/face/register';
 
-  /// POST /face/verify, memverifikasi wajah pasien sebelum sesi AI-VOT.
+  /// `POST /face/verify`, multipart field `image` dan form `medicine_schedule_id`.
   static const String faceVerify = '/face/verify';
 
-  /// POST /video-verifications, membuat record verifikasi video minum obat.
-  static const String videoVerifications = '/video-verifications';
+  /// `GET /face/status`, status pendaftaran wajah pemegang token.
+  static const String faceStatus = '/face/status';
+
+  /// `GET /medications/today`, daily medication milik pemegang token hari ini.
+  static const String medicationsToday = '/medications/today';
+
+  /// `POST /vot/start`, body JSON `medicine_schedule_id`.
+  static const String votStart = '/vot/start';
+
+  /// `POST /vot/face-verify`, multipart `daily_medication_id` + `image`.
+  static const String votFaceVerify = '/vot/face-verify';
+
+  /// `POST /vot/medicine-detect`, multipart `daily_medication_id` + `image`.
+  static const String votMedicineDetect = '/vot/medicine-detect';
+
+  /// `POST /vot/complete`, body JSON `daily_medication_id` + `drinking_verified`.
+  static const String votComplete = '/vot/complete';
+
+  /// `GET /vot/{daily_medication_id}`.
+  static String votSession(int dailyMedicationId) =>
+      '/vot/$dailyMedicationId';
 }

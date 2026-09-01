@@ -46,9 +46,7 @@ class NotificationCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isRead ? AppColors.surfaceContainerLow : AppColors.surface,
         borderRadius: AppRadius.card,
-        border: Border.all(
-          color: AppColors.outlineVariant,
-        ),
+        border: Border.all(color: AppColors.outlineVariant),
         boxShadow: isRead
             ? null
             : [
@@ -62,7 +60,6 @@ class NotificationCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           Container(
             width: 52,
             height: 52,
@@ -70,11 +67,7 @@ class NotificationCard extends StatelessWidget {
               color: iconBackground,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: Icon(icon, color: Colors.white, size: 28),
           ),
 
           const SizedBox(width: 16),
@@ -83,19 +76,20 @@ class NotificationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
                         title,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: isRead
-                                      ? FontWeight.w600
-                                      : FontWeight.bold,
-                                ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: isRead
+                                  ? FontWeight.w600
+                                  : FontWeight.bold,
+                            ),
                       ),
                     ),
 
@@ -119,10 +113,12 @@ class NotificationCard extends StatelessWidget {
 
                 Text(
                   subtitle,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.5,
-                      ),
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
                 ),
 
                 const SizedBox(height: 14),
@@ -130,8 +126,8 @@ class NotificationCard extends StatelessWidget {
                 Text(
                   time,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                    color: AppColors.textSecondary,
+                  ),
                 ),
 
                 if (showActions) ...[
@@ -139,13 +135,10 @@ class NotificationCard extends StatelessWidget {
 
                   Row(
                     children: [
-
                       Expanded(
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(
-                              color: AppColors.primary,
-                            ),
+                            side: const BorderSide(color: AppColors.primary),
                             shape: RoundedRectangleBorder(
                               borderRadius: AppRadius.button,
                             ),

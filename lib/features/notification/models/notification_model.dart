@@ -1,3 +1,5 @@
+import '../utils/notification_time.dart';
+
 /// Response `NotificationResponse` dari backend SITARA.
 ///
 /// Field mengikuti persis apa yang dikirim backend, tanpa tambahan.
@@ -55,6 +57,8 @@ class NotificationModel {
     );
   }
 
+  String get normalizedType => type.trim().toLowerCase();
+
   /// Notifikasi jadwal kontrol dari backend.
   ///
   /// `NotificationType.CONTROL` bernilai `control`;
@@ -62,20 +66,23 @@ class NotificationModel {
   /// Perbandingan tidak peka huruf besar/kecil karena serializer enum bisa
   /// mengirim nama atau nilai.
   bool get isControlScheduleNotification {
-    if (type.toLowerCase() == 'control') return true;
+    if (normalizedType == 'control') return true;
     return referenceType?.toLowerCase() == 'control_schedule';
   }
 
+  bool get isMedicineNotification => normalizedType == 'medicine';
+
+  bool get isComplaintNotification => normalizedType == 'complaint';
+
+  bool get isVideoNotification => normalizedType == 'video';
+
+  bool get isRefillNotification => normalizedType == 'refill';
+
   /// Waktu pembuatan dalam zona waktu perangkat.
   ///
-  /// Backend mengirim tipe `date-time`. Bila nilainya menyertakan penanda UTC,
-  /// hasilnya dikonversi ke waktu lokal; bila tidak, nilai dipakai apa adanya
-  /// tanpa mengasumsikan zona waktu tertentu.
-  DateTime? get createdAtDateTime {
-    final DateTime? parsed = DateTime.tryParse(createdAt);
-    if (parsed == null) return null;
-    return parsed.isUtc ? parsed.toLocal() : parsed;
-  }
+  /// Offset/`Z` diubah ke local sekali. String tanpa zona dipakai sebagai
+  /// jam dinding lokal, tanpa konversi kedua.
+  DateTime? get createdAtDateTime => NotificationTime.parse(createdAt);
 
   @override
   String toString() =>

@@ -4,6 +4,8 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 
 import '../../features/notification/pages/notification_page.dart';
+import '../../features/notification/utils/notification_inbox_scope.dart';
+import '../../features/notification/widgets/notification_unread_badge.dart';
 
 class SitaraAppBar extends StatelessWidget
     implements PreferredSizeWidget {
@@ -14,6 +16,8 @@ class SitaraAppBar extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
+    final inbox = NotificationInboxScope.maybeOf(context);
+
     return AppBar(
       automaticallyImplyLeading: false,
       elevation: 0,
@@ -65,21 +69,32 @@ class SitaraAppBar extends StatelessWidget
                 color: AppColors.outlineVariant,
               ),
             ),
-            child: IconButton(
-  splashRadius: 22,
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const NotificationPage(),
-      ),
-    );
-  },
-  icon: const Icon(
-    Icons.notifications_none_rounded,
-    color: AppColors.onSurface,
-  ),
-),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  splashRadius: 22,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.notifications_none_rounded,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                if (inbox != null)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: NotificationBellBadge(inbox: inbox),
+                  ),
+              ],
+            ),
           ),
         ),
       ],

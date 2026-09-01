@@ -6,8 +6,7 @@ import '../models/verification_state.dart';
 /// menambahkan implementasi baru tanpa mengubah halaman maupun widget.
 abstract interface class VerificationService {
   /// Menjalankan alur verifikasi dan memancarkan perubahan state secara
-  /// berurutan hingga [VerificationState.success] atau
-  /// [VerificationState.failed].
+  /// berurutan hingga [VerificationState.completed].
   Stream<VerificationState> start();
 
   /// Menghentikan alur yang sedang berjalan.

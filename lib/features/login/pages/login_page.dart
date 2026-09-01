@@ -6,6 +6,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
 import '../../home/pages/home_page.dart';
+import '../../notification/utils/notification_inbox_scope.dart';
 
 import '../controllers/login_controller.dart';
 
@@ -17,7 +18,13 @@ import '../widgets/login_security_banner.dart';
 
 /// Halaman Login SITARA Health
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({
+    super.key,
+    this.notice,
+  });
+
+  /// Pesan singkat setelah aktivasi, ditampilkan sekali di snackbar.
+  final String? notice;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -31,6 +38,18 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _obscurePassword = true;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final String? notice = widget.notice;
+    if (notice != null && notice.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _showMessage(notice);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -88,6 +107,8 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       setState(() => _isLoading = false);
+
+      NotificationInboxScope.maybeOf(context)?.start();
 
       Navigator.pushReplacement(
         context,

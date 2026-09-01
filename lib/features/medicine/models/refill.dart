@@ -47,6 +47,30 @@ class Refill {
   final String createdAt;
   final String updatedAt;
 
+  /// Body `POST /refills` (`RefillCreate`).
+  ///
+  /// `description` opsional di backend, jadi hanya dikirim jika terisi.
+  static Map<String, dynamic> createRequestBody({
+    required int treatmentId,
+    required int medicineId,
+    required int quantity,
+    required String reason,
+    String? description,
+  }) {
+    final Map<String, dynamic> body = <String, dynamic>{
+      'treatment_id': treatmentId,
+      'medicine_id': medicineId,
+      'quantity': quantity,
+      'reason': reason,
+    };
+
+    final String? detail = description?.trim();
+    if (detail != null && detail.isNotEmpty) {
+      body['description'] = detail;
+    }
+    return body;
+  }
+
   factory Refill.fromJson(Map<String, dynamic> json) {
     return Refill(
       id: (json['id'] as num?)?.toInt() ?? 0,
@@ -120,6 +144,15 @@ class Refill {
     });
 
     return sorted;
+  }
+
+  /// Mencari permintaan dari hasil `GET /refills/my`. Null bila tidak ada.
+  static Refill? findById(List<Refill> items, int? id) {
+    if (id == null || id <= 0) return null;
+    for (final Refill item in items) {
+      if (item.id == id) return item;
+    }
+    return null;
   }
 
   /// Permintaan terbaru, dipakai kartu informasi untuk menampilkan statusnya.
