@@ -10,12 +10,15 @@
 class ApiConfig {
   const ApiConfig._();
 
+  /// Alamat IP laptop saat ini di jaringan Wi-Fi.
+  static const String localLaptopBaseUrl = 'http://192.168.20.108:8000';
+
   /// Alamat host machine dilihat dari dalam Android Emulator.
   static const String androidEmulatorBaseUrl = 'http://10.0.2.2:8000';
 
   static const String baseUrl = String.fromEnvironment(
     'SITARA_API_BASE_URL',
-    defaultValue: androidEmulatorBaseUrl, 
+    defaultValue: localLaptopBaseUrl, 
   );
 
   static const Duration connectTimeout = Duration(seconds: 15);
