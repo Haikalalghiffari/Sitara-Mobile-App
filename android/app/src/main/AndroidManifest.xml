@@ -68,5 +68,10 @@
             <action android:name="android.intent.action.GET_CONTENT"/>
             <data android:mimeType="image/*"/>
         </intent>
+        <!-- Membuka tautan Google Maps di aplikasi luar (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

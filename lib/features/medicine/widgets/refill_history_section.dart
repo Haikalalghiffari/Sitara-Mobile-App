@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
+import '../../../core/utils/external_link.dart';
 
 import '../models/my_medicine_schedule.dart';
 import '../models/refill.dart';
+import 'refill_pickup_card.dart';
 
 /// Riwayat pesan ulang obat dari `GET /refills/my`.
 ///
@@ -22,6 +24,7 @@ class RefillHistorySection extends StatelessWidget {
     this.errorMessage,
     this.onRetry,
     this.onStartRequest,
+    this.openExternalUrl,
   });
 
   final List<Refill> refills;
@@ -36,6 +39,10 @@ class RefillHistorySection extends StatelessWidget {
 
   /// CTA empty state. Tetap di halaman yang sama, menggulir ke formulir.
   final VoidCallback? onStartRequest;
+
+  /// Pembuka tautan Google Maps pada kartu pengambilan. Dapat diganti pada
+  /// pengujian; default memakai [ExternalLink.open].
+  final ExternalUrlOpener? openExternalUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -208,6 +215,9 @@ class RefillHistorySection extends StatelessWidget {
     final String? nurseNote = refill.nurseNoteText;
     final bool highlighted = refill.id == highlightedRefillId;
 
+    // Hanya permintaan berstatus `approved` yang punya lokasi pengambilan.
+    final PickupFacility? pickupFacility = refill.approvedPickupFacility;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -335,6 +345,15 @@ class RefillHistorySection extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ],
+
+          if (pickupFacility != null) ...[
+            const SizedBox(height: 14),
+
+            RefillPickupCard(
+              facility: pickupFacility,
+              openExternalUrl: openExternalUrl,
             ),
           ],
         ],

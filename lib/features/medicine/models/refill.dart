@@ -1,5 +1,100 @@
 import '../../../core/utils/indonesian_date.dart';
 
+/// `pickup_facility` pada `RefillResponse`, berasal dari `HealthFacility`
+/// milik fasilitas akun pasien.
+///
+/// Backend menyatakan `address`, `phone`, `latitude`, dan `longitude` boleh
+/// null, jadi keempatnya tidak dipaksa non-null di sini. Backend tidak
+/// mengirim tanggal maupun jam pengambilan, sehingga model ini juga tidak
+/// memilikinya.
+class PickupFacility {
+  const PickupFacility({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.phone,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final int id;
+  final String name;
+  final String? address;
+  final String? phone;
+  final double? latitude;
+  final double? longitude;
+
+  factory PickupFacility.fromJson(Map<String, dynamic> json) {
+    return PickupFacility(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? '',
+      address: json['address']?.toString(),
+      phone: json['phone']?.toString(),
+      latitude: _coordinate(json['latitude']),
+      longitude: _coordinate(json['longitude']),
+    );
+  }
+
+  /// `pickup_facility` bisa absen atau null pada permintaan yang belum
+  /// disetujui, jadi nilai yang bukan objek menghasilkan null.
+  static PickupFacility? maybeFromJson(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      return PickupFacility.fromJson(data);
+    }
+    return null;
+  }
+
+  /// Backend dapat mengirim koordinat sebagai angka atau teks desimal.
+  /// Nilai yang tidak terbaca menghasilkan null, bukan 0.
+  static double? _coordinate(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
+  }
+
+  /// Nama fasilitas yang layak ditampilkan, null bila kosong.
+  String? get nameText {
+    final String text = name.trim();
+    if (text.isEmpty) return null;
+    return text;
+  }
+
+  /// Alamat yang layak ditampilkan, null bila backend mengirim null/kosong.
+  String? get addressText {
+    final String? text = address?.trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
+  }
+
+  /// Nomor telepon yang layak ditampilkan, null bila kosong.
+  String? get phoneText {
+    final String? text = phone?.trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
+  }
+
+  bool get hasCoordinates => latitude != null && longitude != null;
+
+  /// URL pencarian Google Maps dari koordinat backend.
+  ///
+  /// Backend tidak mengirim URL maps, jadi tautannya dibangun di sisi aplikasi.
+  /// Null bila salah satu koordinat tidak tersedia, agar tidak ada lokasi
+  /// karangan yang dibuka.
+  Uri? get mapsUri {
+    final double? lat = latitude;
+    final double? lng = longitude;
+    if (lat == null || lng == null) return null;
+
+    return Uri.https('www.google.com', '/maps/search/', <String, String>{
+      'api': '1',
+      'query': '$lat,$lng',
+    });
+  }
+
+  @override
+  String toString() => 'PickupFacility(id: $id, name: $name)';
+}
+
 /// Response `RefillResponse` dari `GET /refills/my` dan `POST /refills`.
 ///
 /// Field mengikuti persis schema backend, tanpa tambahan. Nama obat tidak ada
@@ -19,6 +114,7 @@ class Refill {
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
+    this.pickupFacility,
   });
 
   final int id;
@@ -46,6 +142,9 @@ class Refill {
   final bool isActive;
   final String createdAt;
   final String updatedAt;
+
+  /// `pickup_facility` dari backend. Null bila tidak dikirim.
+  final PickupFacility? pickupFacility;
 
   /// Body `POST /refills` (`RefillCreate`).
   ///
@@ -86,6 +185,7 @@ class Refill {
       isActive: json['is_active'] == true,
       createdAt: json['created_at']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? '',
+      pickupFacility: PickupFacility.maybeFromJson(json['pickup_facility']),
     );
   }
 
@@ -104,6 +204,21 @@ class Refill {
       default:
         return null;
     }
+  }
+
+  /// `RefillRequestStatus.APPROVED` dari backend.
+  bool get isApproved => status.trim().toLowerCase() == 'approved';
+
+  /// Fasilitas pengambilan yang layak ditampilkan.
+  ///
+  /// Hanya untuk permintaan yang sudah disetujui, dan hanya bila backend
+  /// benar-benar mengirim `pickup_facility` beserta namanya. Tidak ada
+  /// fasilitas karangan ketika datanya belum ada.
+  PickupFacility? get approvedPickupFacility {
+    if (!isApproved) return null;
+    final PickupFacility? facility = pickupFacility;
+    if (facility == null || facility.nameText == null) return null;
+    return facility;
   }
 
   /// Tanggal permintaan dibuat, tanpa konversi zona waktu.
