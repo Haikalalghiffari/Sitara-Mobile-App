@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -24,6 +25,7 @@ import '../models/vot_start_response.dart';
 import '../pages/register_face_page.dart';
 import '../services/face_service.dart';
 import '../services/local_drinking_service.dart';
+import '../services/vot_recording_service.dart';
 import '../services/vot_service.dart';
 import '../utils/drinking_sequence.dart';
 import '../utils/today_medication_picker.dart';
@@ -77,6 +79,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   final FaceService _faceService = FaceService();
   final VotService _votService = VotService();
+  final VotRecordingService _recordingService = VotRecordingService();
   final AuthService _authService = AuthService();
   final LocalDrinkingService _drinkingService = LocalDrinkingService();
   final DrinkingSequenceMachine _drinkingMachine = DrinkingSequenceMachine();
@@ -94,6 +97,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+      DeviceOrientation.portraitUp,
+    ]));
     WidgetsBinding.instance.addObserver(this);
     _continueAfterRegistrationCheck();
   }
@@ -121,6 +127,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     unawaited(_screenAwake.disable());
     unawaited(_stopImageStream());
     unawaited(_drinkingService.dispose());
+    unawaited(_recordingService.stopRecording(_cameraController));
+    unawaited(_recordingService.cleanUpTemporaryVideo());
     final CameraController? controller = _cameraController;
     _cameraController = null;
     unawaited(controller?.dispose() ?? Future<void>.value());
@@ -273,7 +281,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       status: session.status,
       votStep: session.votStep,
     );
-    if (verified) {
+    final bool needsReview = session.isNeedsReview;
+    if (verified || needsReview) {
       _completionGuard.markSuccess();
     }
     setState(() {
@@ -284,8 +293,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         _feedbackMessage = "Verifikasi minum obat berhasil.";
         _phaseError = false;
         _isBusy = false;
+      } else if (needsReview) {
+        _state = VerificationState.needsReview;
+        _feedbackMessage =
+            "Menunggu pemeriksaan tenaga kesehatan. Bukti video telah disimpan.";
+        _phaseError = false;
+        _isBusy = false;
       } else {
-        _state = VotFlow.afterSession(votStep: session.votStep);
+        _state = VotFlow.afterSession(
+          votStep: session.votStep,
+          status: session.status,
+        );
       }
     });
   }
@@ -593,6 +611,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     _cancelDrinkingTimeout();
     await _stopImageStream();
     await _drinkingService.dispose();
+    await _recordingService.stopRecording(_cameraController);
+    unawaited(_recordingService.cleanUpTemporaryVideo());
     await _screenAwake.disable();
     await _releaseCamera();
     if (!mounted) return;
@@ -648,6 +668,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       );
 
       await controller.initialize();
+      try {
+        await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      } catch (_) {}
       if (!mounted || epoch != _cameraEpoch) {
         await controller.dispose();
         return;
@@ -850,6 +873,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
 
+      if (!result.canRetry || result.attemptCount >= 3) {
+        setState(() {
+          _state = VerificationState.needsReview;
+          _phaseError = false;
+          _feedbackMessage =
+              "Batas percobaan tercapai. Verifikasi diteruskan ke tenaga kesehatan.";
+          _isBusy = false;
+        });
+        return;
+      }
+
       setState(() {
         _state = VerificationState.faceVerifying;
         _phaseError = true;
@@ -998,6 +1032,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _beginDrinking({bool isRetry = false}) async {
     _cancelDrinkingTimeout();
     await _stopImageStream();
+    unawaited(_recordingService.cleanUpTemporaryVideo());
     _drinkingMachine.reset();
     setState(() {
       _state = isRetry
@@ -1011,6 +1046,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     try {
       await _drinkingService.ensureInitialized();
       await _startImageStream();
+      unawaited(_recordingService.startRecording(_cameraController));
       if (!mounted) return;
       _drinkingStartedAt = DateTime.now();
       _armDrinkingTimeout();
@@ -1053,13 +1089,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
-    unawaited(_stopImageStream());
-    setState(() {
-      _state = VotFlow.afterDrinkingTimeout();
-      _phaseError = true;
-      _isBusy = false;
-      _feedbackMessage = DrinkingSequenceConfig.timeoutMessage;
-    });
+    unawaited(_completeAfterDrinking(
+      drinkingVerified: false,
+      failureReason: 'DRINKING_TIMEOUT',
+    ));
   }
 
   Future<void> _retryDrinking() async {
@@ -1125,15 +1158,39 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _completeAfterDrinking() async {
+  Future<void> _completeAfterDrinking({
+    bool drinkingVerified = true,
+    String? failureReason,
+  }) async {
     _cancelDrinkingTimeout();
     if (!_completionGuard.tryBegin()) return;
 
     await _stopImageStream();
     await _drinkingService.dispose();
 
+    final XFile? recordedFile =
+        await _recordingService.stopRecording(_cameraController);
+    final int? dailyId = _dailyMedicationId;
+
+    if (dailyId != null && recordedFile != null) {
+      try {
+        await _votService.uploadVideo(
+          dailyMedicationId: dailyId,
+          videoPath: recordedFile.path,
+        );
+      } catch (_) {
+        // Safe error handling; upload failure does not crash app
+      } finally {
+        unawaited(_recordingService.cleanUpTemporaryVideo());
+      }
+    }
+
+    final String maxStage = _drinkingMachine.maxStageReached.name;
     final Map<String, Object>? body = VotFlow.completeRequestBody(
-      _dailyMedicationId,
+      dailyId,
+      drinkingVerified: drinkingVerified,
+      maxDrinkingStage: maxStage,
+      failureReason: failureReason,
     );
     if (body == null) {
       _completionGuard.markFailure();
@@ -1156,14 +1213,21 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _feedbackMessage = "Memverifikasi proses minum...";
     });
 
-    await _submitCompleteRequest();
+    await _submitCompleteRequest(
+      drinkingVerified: drinkingVerified,
+      maxDrinkingStage: maxStage,
+      failureReason: failureReason,
+    );
   }
 
   Future<void> _retryComplete() async {
     if (!_completionGuard.tryBegin()) return;
 
+    final String maxStage = _drinkingMachine.maxStageReached.name;
     final Map<String, Object>? body = VotFlow.completeRequestBody(
       _dailyMedicationId,
+      drinkingVerified: true,
+      maxDrinkingStage: maxStage,
     );
     if (body == null) {
       _completionGuard.markFailure();
@@ -1185,10 +1249,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _feedbackMessage = "Memverifikasi proses minum...";
     });
 
-    await _submitCompleteRequest();
+    await _submitCompleteRequest(
+      drinkingVerified: true,
+      maxDrinkingStage: maxStage,
+    );
   }
 
-  Future<void> _submitCompleteRequest() async {
+  Future<void> _submitCompleteRequest({
+    bool drinkingVerified = true,
+    String? maxDrinkingStage,
+    String? failureReason,
+  }) async {
     final int? dailyId = _dailyMedicationId;
     if (dailyId == null || dailyId <= 0) {
       _completionGuard.markFailure();
@@ -1204,11 +1275,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
 
     try {
-      final result = await _votService.complete(dailyMedicationId: dailyId);
+      final result = await _votService.complete(
+        dailyMedicationId: dailyId,
+        drinkingVerified: drinkingVerified,
+        maxDrinkingStage: maxDrinkingStage ?? _drinkingMachine.maxStageReached.name,
+        failureReason: failureReason,
+      );
       if (!mounted) return;
 
       if (result.isFinalSuccess) {
         _completionGuard.markSuccess();
+        unawaited(_recordingService.cleanUpTemporaryVideo());
         setState(() {
           _state = VerificationState.completed;
           _isBusy = false;
@@ -1221,14 +1298,30 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
 
+      if (result.isNeedsReview || !result.canRetry) {
+        _completionGuard.markSuccess();
+        unawaited(_recordingService.cleanUpTemporaryVideo());
+        setState(() {
+          _state = VerificationState.needsReview;
+          _isBusy = false;
+          _phaseError = false;
+          _feedbackMessage = result.message.isNotEmpty
+              ? result.message
+              : "Verifikasi memerlukan pemeriksaan tenaga kesehatan. Bukti video telah disimpan.";
+        });
+        unawaited(_refreshCanTestAgain());
+        return;
+      }
+
+      // Can retry drinking
       _completionGuard.markFailure();
       setState(() {
-        _state = VerificationState.completing;
+        _state = VerificationState.drinking;
         _isBusy = false;
         _phaseError = true;
         _feedbackMessage = result.message.isNotEmpty
             ? result.message
-            : "Verifikasi minum belum disimpan. Silakan coba lagi.";
+            : "Proses minum belum terverifikasi. Silakan coba lagi.";
       });
     } on ApiException catch (error) {
       _completionGuard.markFailure();
@@ -1238,7 +1331,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
       setState(() {
-        _state = VerificationState.completing;
+        _state = VerificationState.drinking;
         _isBusy = false;
         _phaseError = true;
         _feedbackMessage = error.message;
@@ -1247,7 +1340,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _completionGuard.markFailure();
       if (!mounted) return;
       setState(() {
-        _state = VerificationState.completing;
+        _state = VerificationState.drinking;
         _isBusy = false;
         _phaseError = true;
         _feedbackMessage = ApiException.unexpectedMessage;

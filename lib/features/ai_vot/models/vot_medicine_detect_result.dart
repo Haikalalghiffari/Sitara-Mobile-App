@@ -38,6 +38,9 @@ class VotMedicineDetectResult {
     required this.status,
     required this.votStep,
     required this.message,
+    this.attemptCount = 0,
+    this.canRetry = true,
+    this.failureReason,
   });
 
   final int dailyMedicationId;
@@ -50,6 +53,9 @@ class VotMedicineDetectResult {
   final String status;
   final String votStep;
   final String message;
+  final int attemptCount;
+  final bool canRetry;
+  final String? failureReason;
 
   factory VotMedicineDetectResult.fromJson(Map<String, dynamic> json) {
     final dynamic rawBox = json['bounding_box'];
@@ -72,6 +78,9 @@ class VotMedicineDetectResult {
       status: json['status']?.toString() ?? '',
       votStep: json['vot_step']?.toString() ?? '',
       message: json['message']?.toString().trim() ?? '',
+      attemptCount: (json['attempt_count'] as num?)?.toInt() ?? 0,
+      canRetry: json['can_retry'] as bool? ?? true,
+      failureReason: json['failure_reason']?.toString().trim(),
     );
   }
 }

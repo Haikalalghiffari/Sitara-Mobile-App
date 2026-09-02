@@ -107,11 +107,18 @@ class _LivePreview extends StatelessWidget {
       return const ColoredBox(color: AppColors.inverseSurface);
     }
 
+    final double portraitWidth = previewSize.width < previewSize.height
+        ? previewSize.width
+        : previewSize.height;
+    final double portraitHeight = previewSize.width > previewSize.height
+        ? previewSize.width
+        : previewSize.height;
+
     return FittedBox(
       fit: BoxFit.cover,
       child: SizedBox(
-        width: previewSize.height,
-        height: previewSize.width,
+        width: portraitWidth,
+        height: portraitHeight,
         child: CameraPreview(controller),
       ),
     );

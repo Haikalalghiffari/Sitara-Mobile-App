@@ -96,7 +96,7 @@ class TodayMedicationPicker {
 
   /// Item `eligible == true` yang belum verified. Null tidak dianggap true.
   static bool _isBackendEligible(DailyMedication item) {
-    if (item.isServerVerified) return false;
+    if (item.isServerVerified || item.isNeedsReview) return false;
     return item.eligible == true;
   }
 
@@ -104,7 +104,7 @@ class TodayMedicationPicker {
   static DailyMedication? nextUpcoming(List<DailyMedication> items) {
     final List<DailyMedication> upcoming = items
         .where((DailyMedication item) {
-          if (item.isServerVerified) return false;
+          if (item.isServerVerified || item.isNeedsReview) return false;
           if (item.isInProgress) return false;
           if (item.eligible == false) return true;
           return item.eligible == null && item.isPending;

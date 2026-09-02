@@ -10,6 +10,9 @@ class VotFaceVerifyResult {
     required this.status,
     required this.votStep,
     required this.message,
+    this.attemptCount = 0,
+    this.canRetry = true,
+    this.failureReason,
   });
 
   final int dailyMedicationId;
@@ -21,6 +24,9 @@ class VotFaceVerifyResult {
   final String status;
   final String votStep;
   final String message;
+  final int attemptCount;
+  final bool canRetry;
+  final String? failureReason;
 
   factory VotFaceVerifyResult.fromJson(Map<String, dynamic> json) {
     return VotFaceVerifyResult(
@@ -35,6 +41,9 @@ class VotFaceVerifyResult {
       status: json['status']?.toString() ?? '',
       votStep: json['vot_step']?.toString() ?? '',
       message: json['message']?.toString().trim() ?? '',
+      attemptCount: (json['attempt_count'] as num?)?.toInt() ?? 0,
+      canRetry: json['can_retry'] as bool? ?? true,
+      failureReason: json['failure_reason']?.toString().trim(),
     );
   }
 }

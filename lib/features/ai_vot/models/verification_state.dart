@@ -12,6 +12,7 @@ enum VerificationState {
   drinking,
   completing,
   completed,
+  needsReview,
 }
 
 extension VerificationStateX on VerificationState {
@@ -25,6 +26,7 @@ extension VerificationStateX on VerificationState {
         VerificationState.drinking => "Verifikasi visual proses minum",
         VerificationState.completing => "Memverifikasi proses minum...",
         VerificationState.completed => "Verifikasi minum obat berhasil",
+        VerificationState.needsReview => "Menunggu pemeriksaan nakes",
       };
 
   String get instruction => switch (this) {
@@ -41,6 +43,8 @@ extension VerificationStateX on VerificationState {
           "Minum obat seperti biasa di depan kamera",
         VerificationState.completing => "Memverifikasi proses minum...",
         VerificationState.completed => "Verifikasi minum obat berhasil.",
+        VerificationState.needsReview =>
+          "Video proses minum telah disimpan sebagai bukti. Silakan tunggu pemeriksaan dari tenaga kesehatan.",
       };
 
   bool get isProcessing => switch (this) {
@@ -59,7 +63,10 @@ extension VerificationStateX on VerificationState {
 
   /// Layar tetap nyala hanya selama sesi VOT berjalan, bukan seluruh app.
   bool get keepScreenAwake => switch (this) {
-        VerificationState.ready || VerificationState.completed => false,
+        VerificationState.ready ||
+        VerificationState.completed ||
+        VerificationState.needsReview =>
+          false,
         _ => true,
       };
 
@@ -75,6 +82,8 @@ extension VerificationStateX on VerificationState {
         VerificationState.drinking ||
         VerificationState.completing =>
           3,
-        VerificationState.completed => 4,
+        VerificationState.completed ||
+        VerificationState.needsReview =>
+          4,
       };
 }

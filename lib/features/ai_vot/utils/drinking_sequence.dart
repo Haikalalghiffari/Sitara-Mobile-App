@@ -9,12 +9,6 @@ enum DrinkingStage {
 }
 
 /// Ambang temporal sequence minum.
-///
-/// MediaPipe di-throttle ~200ms per frame (`LocalDrinkingService`).
-/// [minDwell] 120ms artinya tahap berikutnya baru sah pada frame berikutnya
-/// (dua frame berurutan), bukan satu frame. Nilai lama 280ms memaksa dua
-/// interval throttle (~400ms) per tahap, sehingga pasien menahan obat terlalu
-/// lama di mulut.
 class DrinkingSequenceConfig {
   const DrinkingSequenceConfig._();
 
@@ -42,11 +36,13 @@ class DrinkingSequenceMachine {
   final Duration minDwell;
 
   DrinkingStage stage = DrinkingStage.waiting;
+  DrinkingStage maxStageReached = DrinkingStage.waiting;
   double? _lastDistance;
   DateTime? _enteredAt;
 
   void reset() {
     stage = DrinkingStage.waiting;
+    maxStageReached = DrinkingStage.waiting;
     _lastDistance = null;
     _enteredAt = null;
   }
@@ -128,6 +124,9 @@ class DrinkingSequenceMachine {
   }
 
   void _setStage(DrinkingStage next, DateTime now) {
+    if (next.index > maxStageReached.index) {
+      maxStageReached = next;
+    }
     if (stage == next) return;
     stage = next;
     _enteredAt = now;

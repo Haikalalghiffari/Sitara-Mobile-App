@@ -12,6 +12,10 @@ class DailyMedication {
     required this.status,
     required this.votStep,
     this.eligible,
+    this.attemptCount = 0,
+    this.canRetry = true,
+    this.failureReason,
+    this.maxDrinkingStage,
   });
 
   final int dailyMedicationId;
@@ -29,8 +33,14 @@ class DailyMedication {
   /// karena schema sesi tidak mengirim field ini.
   final bool? eligible;
 
+  final int attemptCount;
+  final bool canRetry;
+  final String? failureReason;
+  final String? maxDrinkingStage;
+
   bool get isPending => status == 'pending';
   bool get isInProgress => status == 'in_progress';
+  bool get isNeedsReview => status.toLowerCase() == 'needs_review';
 
   /// Boleh mulai atau lanjut hanya jika backend mengizinkan.
   ///
@@ -100,6 +110,10 @@ class DailyMedication {
       status: json['status']?.toString() ?? '',
       votStep: json['vot_step']?.toString() ?? '',
       eligible: _parseEligible(json['eligible']),
+      attemptCount: (json['attempt_count'] as num?)?.toInt() ?? 0,
+      canRetry: json['can_retry'] as bool? ?? true,
+      failureReason: json['failure_reason']?.toString().trim(),
+      maxDrinkingStage: json['max_drinking_stage']?.toString().trim(),
     );
   }
 

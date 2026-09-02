@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
@@ -15,8 +16,11 @@ import 'features/notification/widgets/notification_overlay_host.dart';
 final GlobalKey<NavigatorState> sitaraNavigatorKey =
     GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const SitaraApp());
 }
 

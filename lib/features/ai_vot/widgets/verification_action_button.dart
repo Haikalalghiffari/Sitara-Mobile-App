@@ -149,6 +149,11 @@ class VerificationActionButton extends StatelessWidget {
           Icons.check_rounded,
           onFinish,
         ),
+      VerificationState.needsReview => (
+          "Kembali",
+          Icons.arrow_back_rounded,
+          onFinish,
+        ),
       _ => (state.statusLabel, null, null),
     };
   }

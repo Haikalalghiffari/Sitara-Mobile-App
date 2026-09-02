@@ -154,12 +154,48 @@ class VotService {
     }
   }
 
+  /// `POST /vot/{daily_medication_id}/video`. Upload automatic video evidence.
+  Future<void> uploadVideo({
+    required int dailyMedicationId,
+    required String videoPath,
+  }) async {
+    try {
+      final FormData formData = FormData.fromMap(<String, dynamic>{
+        'video': await MultipartFile.fromFile(
+          videoPath,
+          filename: _fileName(videoPath),
+          contentType: DioMediaType.parse(_videoContentType(videoPath)),
+        ),
+      });
+
+      await _apiClient.dio.post<dynamic>(
+        ApiEndpoints.votVideo(dailyMedicationId),
+        data: formData,
+        options: Options(
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 90),
+        ),
+      );
+    } on ApiException {
+      rethrow;
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
   /// `POST /vot/complete`. Sukses UI hanya jika [VotCompleteResponse.isFinalSuccess].
   Future<VotCompleteResponse> complete({
     required int dailyMedicationId,
+    bool drinkingVerified = true,
+    String? maxDrinkingStage,
+    String? failureReason,
   }) async {
-    final Map<String, Object>? body =
-        VotFlow.completeRequestBody(dailyMedicationId);
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      dailyMedicationId,
+      drinkingVerified: drinkingVerified,
+      maxDrinkingStage: maxDrinkingStage,
+      failureReason: failureReason,
+    );
     if (body == null) {
       throw const ApiException(
         'ID sesi VOT tidak tersedia. Tidak dapat menyelesaikan verifikasi.',
@@ -231,5 +267,14 @@ class VotService {
       return 'image/jpeg';
     }
     return 'image/jpeg';
+  }
+
+  static String _videoContentType(String path) {
+    final String lower = path.toLowerCase();
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.webm')) return 'video/webm';
+    if (lower.endsWith('.3gp')) return 'video/3gpp';
+    return 'video/mp4';
   }
 }

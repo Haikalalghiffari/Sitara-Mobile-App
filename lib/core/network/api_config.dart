@@ -11,7 +11,7 @@ class ApiConfig {
   const ApiConfig._();
 
   /// Alamat IP laptop saat ini di jaringan Wi-Fi.
-  static const String localLaptopBaseUrl = 'http://192.168.20.108:8000';
+  static const String localLaptopBaseUrl = 'http://172.16.21.245:8000';
 
   /// Alamat host machine dilihat dari dalam Android Emulator.
   static const String androidEmulatorBaseUrl = 'http://10.0.2.2:8000';
@@ -113,6 +113,10 @@ class ApiEndpoints {
 
   /// `POST /vot/complete`, body JSON `daily_medication_id` + `drinking_verified`.
   static const String votComplete = '/vot/complete';
+
+  /// `POST /vot/{daily_medication_id}/video`, multipart `video`.
+  static String votVideo(int dailyMedicationId) =>
+      '/vot/$dailyMedicationId/video';
 
   /// `GET /vot/{daily_medication_id}`.
   static String votSession(int dailyMedicationId) =>

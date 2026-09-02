@@ -144,18 +144,25 @@ class _CameraPreviewLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final previewSize = controller.value.previewSize;
+    final Size? previewSize = controller.value.previewSize;
 
     if (previewSize == null) {
       return const ColoredBox(color: AppColors.inverseSurface);
     }
 
+    final double portraitWidth = previewSize.width < previewSize.height
+        ? previewSize.width
+        : previewSize.height;
+    final double portraitHeight = previewSize.width > previewSize.height
+        ? previewSize.width
+        : previewSize.height;
+
     return ClipRect(
       child: FittedBox(
         fit: BoxFit.cover,
         child: SizedBox(
-          width: previewSize.height,
-          height: previewSize.width,
+          width: portraitWidth,
+          height: portraitHeight,
           child: CameraPreview(controller),
         ),
       ),
