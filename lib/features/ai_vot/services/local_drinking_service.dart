@@ -25,9 +25,19 @@ class LocalDrinkingService {
   bool _busy = false;
   bool _ready = false;
 
+  Offset? _lastMouth;
+  DateTime? _lastMouthAt;
+
   static const Duration _throttle = Duration(milliseconds: 200);
   static const int _upperLip = 13;
   static const int _lowerLip = 14;
+
+  /// Umur maksimal posisi mulut yang boleh dipakai ulang saat face mesh gagal
+  /// sesaat (kedipan, menunduk, tangan menutupi wajah, motion blur).
+  ///
+  /// Kepala tidak berpindah jauh dalam rentang sesingkat ini, sehingga jarak
+  /// tangan ke mulut tetap masuk akal dan urutan minum tidak terputus.
+  static const Duration mouthMemory = Duration(milliseconds: 1500);
 
   Future<void> ensureInitialized() async {
     if (_ready) return;
@@ -79,11 +89,7 @@ class LocalDrinkingService {
 
       final FaceMeshNv21Image? nv21 = CameraNv21Adapter.toNv21(image);
       if (nv21 == null) {
-        return DrinkingObservation(
-          faceVisible: false,
-          handVisible: _latestHands.isNotEmpty,
-          handMouthDistance: null,
-        );
+        return _faceLostObservation(now);
       }
 
       FaceMeshInferenceResult? inference;
@@ -94,40 +100,64 @@ class LocalDrinkingService {
           mirrorHorizontal: frontCamera,
         );
       } catch (_) {
-        return DrinkingObservation(
-          faceVisible: false,
-          handVisible: _latestHands.isNotEmpty,
-          handMouthDistance: null,
-        );
+        return _faceLostObservation(now);
       }
       final FaceMeshResult? mesh = inference.meshResult;
       final bool faceVisible =
           mesh != null && mesh.landmarks.length > _lowerLip;
 
-      Offset? mouth;
-      if (faceVisible) {
-        final FaceMeshLandmark upper = mesh.landmarks[_upperLip];
-        final FaceMeshLandmark lower = mesh.landmarks[_lowerLip];
-        mouth = Offset(
-          (upper.x + lower.x) / 2,
-          (upper.y + lower.y) / 2,
-        );
+      if (!faceVisible) {
+        return _faceLostObservation(now);
       }
+
+      final FaceMeshLandmark upper = mesh.landmarks[_upperLip];
+      final FaceMeshLandmark lower = mesh.landmarks[_lowerLip];
+      final Offset mouth = Offset(
+        (upper.x + lower.x) / 2,
+        (upper.y + lower.y) / 2,
+      );
+      _lastMouth = mouth;
+      _lastMouthAt = now;
 
       final bool handVisible = _latestHands.isNotEmpty;
       double? distance;
-      if (faceVisible && handVisible && mouth != null) {
+      if (handVisible) {
         distance = _minHandDistance(_latestHands.first, mouth);
       }
 
       return DrinkingObservation(
-        faceVisible: faceVisible,
+        faceVisible: true,
         handVisible: handVisible,
         handMouthDistance: distance,
       );
     } finally {
       _busy = false;
     }
+  }
+
+  /// Frame tanpa wajah. Jarak tangan ke mulut masih dilaporkan bila posisi
+  /// mulut terakhir masih segar, supaya gerakan minum yang sedang berlangsung
+  /// tidak terputus hanya karena wajah tertutup sesaat.
+  DrinkingObservation _faceLostObservation(DateTime now) {
+    final bool handVisible = _latestHands.isNotEmpty;
+    final Offset? mouth = _rememberedMouth(now);
+
+    return DrinkingObservation(
+      faceVisible: false,
+      handVisible: handVisible,
+      handMouthDistance: handVisible && mouth != null
+          ? _minHandDistance(_latestHands.first, mouth)
+          : null,
+      mouthFromMemory: mouth != null,
+    );
+  }
+
+  Offset? _rememberedMouth(DateTime now) {
+    final Offset? mouth = _lastMouth;
+    final DateTime? seenAt = _lastMouthAt;
+    if (mouth == null || seenAt == null) return null;
+    if (now.difference(seenAt) > mouthMemory) return null;
+    return mouth;
   }
 
   static double _minHandDistance(Hand hand, Offset mouth) {
@@ -152,6 +182,8 @@ class LocalDrinkingService {
     _detector?.close();
     _detector = null;
     _latestHands = const <Hand>[];
+    _lastMouth = null;
+    _lastMouthAt = null;
   }
 }
 
@@ -160,9 +192,14 @@ class DrinkingObservation {
     required this.faceVisible,
     required this.handVisible,
     required this.handMouthDistance,
+    this.mouthFromMemory = false,
   });
 
   final bool faceVisible;
   final bool handVisible;
   final double? handMouthDistance;
+
+  /// True bila [handMouthDistance] dihitung dari posisi mulut terakhir yang
+  /// diingat, bukan dari wajah pada frame ini.
+  final bool mouthFromMemory;
 }

@@ -6,6 +6,45 @@ class RefillFormValidation {
 
   static const int minQuantity = 1;
 
+  /// Jumlah per permintaan ditetapkan oleh fitur, bukan diisi pasien.
+  ///
+  /// Tidak ada kontrol penambah, pengurang, maupun input teks untuk nilai ini.
+  static const int fixedQuantity = 30;
+
+  /// Validasi form satu obat per permintaan.
+  ///
+  /// Jumlah tidak ikut divalidasi dari input karena selalu [fixedQuantity].
+  static String? validateSingle({
+    required bool hasTreatment,
+    required bool hasMedicine,
+    required String? reason,
+    required bool confirmed,
+  }) {
+    return validate(
+      hasTreatment: hasTreatment,
+      hasMedicine: hasMedicine,
+      reason: reason,
+      quantity: fixedQuantity,
+      confirmed: confirmed,
+    );
+  }
+
+  /// Gerbang aktif/nonaktif tombol kirim.
+  static bool canSubmitSingle({
+    required bool hasTreatment,
+    required bool hasMedicine,
+    required String? reason,
+    required bool confirmed,
+  }) {
+    return validateSingle(
+          hasTreatment: hasTreatment,
+          hasMedicine: hasMedicine,
+          reason: reason,
+          confirmed: confirmed,
+        ) ==
+        null;
+  }
+
   static String? validate({
     required bool hasTreatment,
     required bool hasMedicine,

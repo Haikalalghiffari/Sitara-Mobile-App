@@ -30,6 +30,7 @@ import '../services/vot_service.dart';
 import '../utils/drinking_sequence.dart';
 import '../utils/today_medication_picker.dart';
 import '../utils/vot_completion_guard.dart';
+import '../utils/vot_identity_lock.dart';
 import '../utils/vot_flow.dart';
 import '../utils/vot_screen_awake.dart';
 
@@ -84,6 +85,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   final LocalDrinkingService _drinkingService = LocalDrinkingService();
   final DrinkingSequenceMachine _drinkingMachine = DrinkingSequenceMachine();
   final VotCompletionGuard _completionGuard = VotCompletionGuard();
+
+  /// Identitas diverifikasi sekali per sesi, lalu dikunci. Kemiripan wajah
+  /// tidak diperiksa lagi selama pasien minum obat.
+  final VotIdentityLock _identityLock = VotIdentityLock();
   final VotScreenAwake _screenAwake = VotScreenAwake();
   Timer? _drinkingTimeout;
   DateTime? _drinkingStartedAt;
@@ -284,6 +289,13 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     final bool needsReview = session.isNeedsReview;
     if (verified || needsReview) {
       _completionGuard.markSuccess();
+    }
+
+    // Sesi yang dilanjutkan sudah melewati tahap wajah di server, jadi
+    // identitasnya langsung dikunci: melanjutkan minum obat tidak boleh
+    // memicu verifikasi wajah ulang.
+    if (verified || session.isFaceVerified || session.isMedicineMatched) {
+      _identityLock.lock(now: DateTime.now());
     }
     setState(() {
       _selected = session;
@@ -569,6 +581,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       await _drinkingService.dispose();
       _drinkingMachine.reset();
       _completionGuard.reset();
+      // Sesi berganti jadwal: identitas harus diverifikasi ulang.
+      _identityLock.reset();
 
       if (!mounted) return;
       setState(() {
@@ -608,6 +622,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _leaveVot() async {
     if (_didLeave) return;
     _didLeave = true;
+    // Keluar dari halaman VOT membatalkan kunci identitas sesi.
+    _identityLock.reset();
     _cancelDrinkingTimeout();
     await _stopImageStream();
     await _drinkingService.dispose();
@@ -812,9 +828,24 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Verifikasi identitas awal sesi, satu kali.
+  ///
+  /// Setelah [_identityLock] terkunci, fungsi ini tidak pernah memanggil
+  /// `POST /vot/face-verify` lagi, sehingga tidak ada permintaan berulang saat
+  /// pasien bergerak, menunduk, atau menutupi wajah.
   Future<void> _captureAndVerifyFace() async {
     final int? dailyId = _dailyMedicationId;
     if (_isBusy) return;
+
+    if (!_identityLock.shouldVerifyIdentity) {
+      setState(() {
+        _state = VerificationState.medicineDetecting;
+        _phaseError = false;
+        _feedbackMessage = VotIdentityLock.takeMedicineMessage;
+      });
+      return;
+    }
+
     if (dailyId == null || dailyId <= 0) {
       setState(() {
         _state = VerificationState.faceVerifying;
@@ -857,18 +888,19 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       if (!mounted) return;
 
       if (result.verified) {
+        // Identitas terkunci untuk sisa sesi ini.
+        _identityLock.lock(now: DateTime.now());
+
         setState(() {
           _state = VerificationState.faceVerified;
-          _feedbackMessage = result.message.isNotEmpty
-              ? result.message
-              : "Wajah cocok dengan data pasien terdaftar.";
+          _feedbackMessage = VotIdentityLock.identityVerifiedMessage;
           _isBusy = false;
           _phaseError = false;
         });
         if (!mounted) return;
         setState(() {
           _state = VerificationState.medicineDetecting;
-          _feedbackMessage = "Letakkan obat di dalam kotak.";
+          _feedbackMessage = VotIdentityLock.takeMedicineMessage;
         });
         return;
       }
@@ -1048,6 +1080,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       await _startImageStream();
       unawaited(_recordingService.startRecording(_cameraController));
       if (!mounted) return;
+      // Masa tenggang kehadiran wajah dihitung dari awal tahap minum.
+      _identityLock.markFaceSeen(DateTime.now());
       _drinkingStartedAt = DateTime.now();
       _armDrinkingTimeout();
       setState(() {
@@ -1118,25 +1152,39 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     _streaming = false;
   }
 
+  /// Frame kamera selama tahap minum.
+  ///
+  /// Hanya deteksi lokal: kehadiran wajah, tangan, dan jarak tangan ke mulut.
+  /// Tidak ada perbandingan kemiripan wajah dan tidak ada permintaan HTTP
+  /// apa pun di sini.
   void _onCameraImage(CameraImage image) {
     if (_state != VerificationState.drinking) return;
     final CameraController? controller = _cameraController;
     if (controller == null) return;
 
+    final DateTime now = DateTime.now();
     final DrinkingObservation? observation = _drinkingService.observeFrame(
       image: image,
       sensorOrientation: controller.description.sensorOrientation,
       frontCamera:
           controller.description.lensDirection == CameraLensDirection.front,
-      now: DateTime.now(),
+      now: now,
     );
     if (observation == null) return;
+
+    // Pengecekan kehadiran wajah, bukan kemiripan wajah. Identitas tetap
+    // terkunci walau wajah hilang.
+    final FacePresenceStatus presence = _identityLock.evaluate(
+      facePresent: observation.faceVisible,
+      now: now,
+    );
 
     final DrinkingStage stage = _drinkingMachine.update(
       handVisible: observation.handVisible,
       faceVisible: observation.faceVisible,
       handMouthDistance: observation.handMouthDistance,
-      now: DateTime.now(),
+      now: now,
+      faceLostWithinGrace: presence == FacePresenceStatus.lostWithinGrace,
     );
 
     if (stage == DrinkingStage.completed) {
@@ -1145,17 +1193,28 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
 
     if (!mounted) return;
-    final String hint = switch (stage) {
-      DrinkingStage.waiting => "Tunjukkan tangan yang memegang obat.",
-      DrinkingStage.handWithMedicine => "Dekatkan obat ke mulut.",
-      DrinkingStage.approachingMouth => "Mendekati mulut...",
-      DrinkingStage.nearMouth => "Minum, lalu jauhkan tangan dari mulut.",
-      DrinkingStage.withdrawing => "Jauhkan tangan dari mulut.",
-      DrinkingStage.completed => "Memverifikasi proses minum...",
+    final String hint = switch (presence) {
+      FacePresenceStatus.present => _drinkingStageHint(stage),
+      FacePresenceStatus.lostWithinGrace =>
+        VotIdentityLock.faceLostBrieflyMessage,
+      FacePresenceStatus.lostTooLong =>
+        VotIdentityLock.faceLostTooLongMessage,
     };
     if (_feedbackMessage != hint) {
       setState(() => _feedbackMessage = hint);
     }
+  }
+
+  static String _drinkingStageHint(DrinkingStage stage) {
+    return switch (stage) {
+      DrinkingStage.waiting => "Tunjukkan tangan yang memegang obat.",
+      DrinkingStage.handWithMedicine => "Dekatkan obat ke mulut.",
+      DrinkingStage.approachingMouth => "Mendekati mulut...",
+      DrinkingStage.nearMouth =>
+        "Gerakan minum terdeteksi. Minum, lalu jauhkan tangan dari mulut.",
+      DrinkingStage.withdrawing => "Jauhkan tangan dari mulut.",
+      DrinkingStage.completed => "Memverifikasi proses minum...",
+    };
   }
 
   Future<void> _completeAfterDrinking({

@@ -56,15 +56,30 @@ class DrinkingSequenceMachine {
     return now.difference(startedAt) >= timeout;
   }
 
+  /// [faceLostWithinGrace] berasal dari `VotIdentityLock`: wajah sedang tidak
+  /// terlihat, tetapi masih di dalam masa tenggang.
+  ///
+  /// Selama masa tenggang, wajah yang hilang tidak menurunkan tahap. Bila
+  /// jarak tangan ke mulut masih terbaca (mulut dari memori jangka pendek
+  /// milik LocalDrinkingService), urutan minum tetap diproses seperti biasa;
+  /// bila tidak, tahap saat ini ditahan. Menunduk, menoleh, tangan menutupi
+  /// wajah, dan motion blur karena itu tidak membatalkan urutan minum.
   DrinkingStage update({
     required bool handVisible,
     required bool faceVisible,
     required double? handMouthDistance,
     required DateTime now,
+    bool faceLostWithinGrace = false,
   }) {
     if (stage == DrinkingStage.completed) return stage;
 
-    if (!handVisible || !faceVisible || handMouthDistance == null) {
+    final bool toleratedFaceLoss = !faceVisible && faceLostWithinGrace;
+    final double? measured = handVisible ? handMouthDistance : null;
+
+    if (measured == null || (!faceVisible && !toleratedFaceLoss)) {
+      // Wajah hilang sesaat tanpa geometri: tahan tahap, jangan turunkan.
+      if (toleratedFaceLoss) return stage;
+
       if (stage == DrinkingStage.waiting ||
           stage == DrinkingStage.handWithMedicine) {
         _setStage(DrinkingStage.waiting, now);
@@ -73,7 +88,7 @@ class DrinkingSequenceMachine {
       return stage;
     }
 
-    final double distance = handMouthDistance;
+    final double distance = measured;
     final double? previous = _lastDistance;
     _lastDistance = distance;
     final bool dwellOk =

@@ -12,7 +12,6 @@ import '../models/my_medicine_schedule.dart';
 import '../services/control_schedule_service.dart';
 import '../services/medicine_schedule_service.dart';
 import '../widgets/medicine_header_section.dart';
-import '../widgets/medicine_stock_card.dart';
 import '../widgets/control_schedule_card.dart';
 import '../widgets/medicine_list_card.dart';
 import '../widgets/medicine_order_button.dart';
@@ -28,7 +27,14 @@ class MedicinePage extends StatefulWidget {
   const MedicinePage({
     super.key,
     this.highlightedControlScheduleId,
+    this.scheduleService,
+    this.controlScheduleService,
   });
+
+  /// Disuntikkan hanya oleh test, mengikuti pola pada ProgressPage. Null
+  /// berarti aplikasi memakai service biasa di atas `ApiClient.instance`.
+  final MedicineScheduleService? scheduleService;
+  final ControlScheduleService? controlScheduleService;
 
   /// Id jadwal kontrol dari `notification.reference_id`.
   ///
@@ -42,9 +48,10 @@ class MedicinePage extends StatefulWidget {
 
 class _MedicinePageState extends State<MedicinePage> {
   final AuthService _authService = AuthService();
-  final MedicineScheduleService _scheduleService = MedicineScheduleService();
-  final ControlScheduleService _controlScheduleService =
-      ControlScheduleService();
+  late final MedicineScheduleService _scheduleService =
+      widget.scheduleService ?? MedicineScheduleService();
+  late final ControlScheduleService _controlScheduleService =
+      widget.controlScheduleService ?? ControlScheduleService();
 
   List<MyMedicineSchedule> _schedules = <MyMedicineSchedule>[];
   String? _scheduleError;
@@ -131,13 +138,6 @@ class _MedicinePageState extends State<MedicinePage> {
     }
   }
 
-  /// Kartu stok hanya punya satu angka, sedangkan pasien bisa memiliki lebih
-  /// dari satu obat. Yang ditampilkan adalah obat dengan sisa proporsional
-  /// paling sedikit, bukan penjumlahan antar obat yang satuannya tak diketahui.
-  MyMedicineSchedule? get _lowestStockSchedule {
-    return MyMedicineSchedule.selectLowestStock(_schedules);
-  }
-
   ControlSchedule? get _upcomingControlSchedule {
     final int? highlightedId = widget.highlightedControlScheduleId;
     if (highlightedId != null) {
@@ -205,14 +205,6 @@ class _MedicinePageState extends State<MedicinePage> {
                             // widgets/medicine_warning_card.dart.
                             // TODO: Render kembali MedicineWarningCard bila
                             // backend menetapkan ambang batas peringatannya.
-                            MedicineStockCard(
-                              schedule: _lowestStockSchedule,
-                              totalCount: _schedules.length,
-                              errorMessage: _scheduleError,
-                            ),
-
-                            const SizedBox(height: 24),
-
                             ControlScheduleCard(
                               schedule: _upcomingControlSchedule,
                               errorMessage: _controlScheduleError,

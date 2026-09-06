@@ -10,9 +10,9 @@ import '../services/medicine_schedule_service.dart';
 import '../services/refill_service.dart';
 
 import '../utils/refill_form_validation.dart';
-import '../widgets/refill_medicine_info_card.dart';
+import '../utils/refill_medicine_options.dart';
+import '../widgets/refill_medicine_picker.dart';
 import '../widgets/refill_reason_section.dart';
-import '../widgets/refill_quantity_field.dart';
 import '../widgets/refill_confirmation_section.dart';
 import '../widgets/refill_summary_section.dart';
 import '../widgets/refill_submit_button.dart';
@@ -26,19 +26,29 @@ import '../../progress/services/treatment_service.dart';
 /// Pengajuan pesan ulang obat.
 ///
 /// `POST /refills` mewajibkan `treatment_id`, `medicine_id`, `quantity`, dan
-/// `reason`. Keempatnya berasal dari backend atau dari input pasien:
-/// `treatment_id` dari `GET /treatments/my`, `medicine_id` dari
-/// `GET /medicine-schedules/my`, sedangkan `quantity` dan `reason` diisi pasien
-/// pada form ini. Riwayat permintaan diambil dari `GET /refills/my`.
+/// `reason`, dengan satu `medicine_id` per permintaan. `treatment_id` dan
+/// `medicine_id` berasal dari obat yang dipilih pasien pada
+/// `GET /medicine-schedules/my`, `quantity` selalu
+/// [RefillFormValidation.fixedQuantity], dan `reason` dipilih pasien di form
+/// ini. Riwayat permintaan diambil dari `GET /refills/my`.
 class MedicineRefillPage extends StatefulWidget {
   const MedicineRefillPage({
     super.key,
     this.highlightedRefillId,
+    this.treatmentService,
+    this.scheduleService,
+    this.refillService,
   });
 
   /// `refill_id` dari `notification.reference_id`, dicocokkan dengan
   /// `GET /refills/my`. Null bila halaman dibuka dari tombol pesan ulang.
   final int? highlightedRefillId;
+
+  /// Disuntikkan hanya oleh test, mengikuti pola pada ProgressPage. Null
+  /// berarti aplikasi memakai service biasa di atas [ApiClient.instance].
+  final TreatmentService? treatmentService;
+  final MedicineScheduleService? scheduleService;
+  final RefillService? refillService;
 
   @override
   State<MedicineRefillPage> createState() =>
@@ -47,15 +57,19 @@ class MedicineRefillPage extends StatefulWidget {
 
 class _MedicineRefillPageState extends State<MedicineRefillPage> {
   final AuthService _authService = AuthService();
-  final TreatmentService _treatmentService = TreatmentService();
-  final MedicineScheduleService _scheduleService = MedicineScheduleService();
-  final RefillService _refillService = RefillService();
+  late final TreatmentService _treatmentService =
+      widget.treatmentService ?? TreatmentService();
+  late final MedicineScheduleService _scheduleService =
+      widget.scheduleService ?? MedicineScheduleService();
+  late final RefillService _refillService =
+      widget.refillService ?? RefillService();
 
   MyTreatment? _treatment;
   String? _treatmentError;
 
   List<MyMedicineSchedule> _schedules = <MyMedicineSchedule>[];
   String? _scheduleError;
+  bool _isLoadingSchedules = true;
 
   List<Refill> _refills = <Refill>[];
   String? _refillsError;
@@ -68,8 +82,11 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
   final GlobalKey _formKey = GlobalKey();
 
   String? selectedReason;
-  int quantity = RefillQuantityField.minQuantity;
   bool isConfirmed = false;
+
+  /// Satu obat per permintaan, sesuai `RefillCreate` yang hanya menerima satu
+  /// `medicine_id`.
+  MyMedicineSchedule? _selectedMedicine;
 
   @override
   void initState() {
@@ -92,6 +109,9 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
         _treatment = MyTreatment.selectCurrent(treatments);
         _treatmentError = null;
       });
+      // Daftar pilihan disaring ke pengobatan aktif, jadi pilihan disegarkan
+      // lagi setelah data pengobatan tiba.
+      _syncSelectionWithOptions();
     } on ApiException catch (error) {
       if (!mounted) return;
 
@@ -124,7 +144,9 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
       setState(() {
         _schedules = schedules;
         _scheduleError = null;
+        _isLoadingSchedules = false;
       });
+      _syncSelectionWithOptions();
     } on ApiException catch (error) {
       if (!mounted) return;
 
@@ -136,6 +158,7 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
       setState(() {
         _schedules = <MyMedicineSchedule>[];
         _scheduleError = error.message;
+        _isLoadingSchedules = false;
       });
     } catch (_) {
       if (!mounted) return;
@@ -143,7 +166,32 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
       setState(() {
         _schedules = <MyMedicineSchedule>[];
         _scheduleError = ApiException.unexpectedMessage;
+        _isLoadingSchedules = false;
       });
+    }
+  }
+
+  /// Menyelaraskan pilihan dengan daftar obat pasien.
+  ///
+  /// Pasien dengan satu jenis obat tidak perlu memilih: satu-satunya pilihan
+  /// yang valid langsung dipakai. Pilihan yang tidak lagi ada pada jadwal
+  /// dikosongkan, supaya `medicine_id` di luar jadwal pasien tidak terkirim.
+  void _syncSelectionWithOptions() {
+    if (!mounted) return;
+
+    final List<MyMedicineSchedule> options = _medicineOptions;
+    final MyMedicineSchedule? selected = _selectedMedicine;
+
+    if (selected != null &&
+        !options.any(
+          (MyMedicineSchedule item) => item.medicineId == selected.medicineId,
+        )) {
+      setState(() => _selectedMedicine = null);
+    }
+
+    if (options.length == 1 &&
+        _selectedMedicine?.medicineId != options.first.medicineId) {
+      setState(() => _selectedMedicine = options.first);
     }
   }
 
@@ -210,38 +258,35 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
     setState(() => _refillsError = message);
   }
 
-  /// Obat yang dipesan ulang.
+  /// Jenis obat yang boleh dipesan ulang.
   ///
-  /// Pilihannya mengikuti kartu stok pada MedicinePage, yaitu jadwal dengan
-  /// sisa proporsional paling sedikit. Jadwal disaring lebih dulu ke pengobatan
-  /// aktif agar pasangan `treatment_id` dan `medicine_id` yang dikirim benar
-  /// berasal dari satu pengobatan, bukan dari dua pengobatan berbeda.
-  MyMedicineSchedule? get _refillSchedule {
-    final MyTreatment? treatment = _treatment;
-
-    final List<MyMedicineSchedule> pool = treatment == null
-        ? _schedules
-        : _schedules
-            .where(
-              (MyMedicineSchedule item) => item.treatmentId == treatment.id,
-            )
-            .toList();
-
-    if (pool.isEmpty) return null;
-
-    // selectLowestStock bernilai null ketika tidak ada jadwal yang rasio
-    // sisanya dapat dihitung, sehingga jadwal pertama dipakai apa adanya.
-    return MyMedicineSchedule.selectLowestStock(pool) ?? pool.first;
+  /// Hanya obat pada jadwal milik pasien yang sedang login, hasil
+  /// `GET /medicine-schedules/my`. Jadwal disaring lebih dulu ke pengobatan
+  /// aktif agar pasangan `treatment_id` dan `medicine_id` yang dikirim berasal
+  /// dari satu pengobatan, bukan dari dua pengobatan berbeda. Satu obat dengan
+  /// beberapa jam minum tetap muncul satu kali.
+  List<MyMedicineSchedule> get _medicineOptions {
+    return RefillMedicineOptions.fromSchedules(
+      _schedules,
+      treatmentId: _treatment?.id,
+    );
   }
 
-  Refill? get _latestRefill => Refill.selectLatest(_refills);
+  bool get _canSubmit {
+    if (_submitLock.isLocked) return false;
+    return RefillFormValidation.canSubmitSingle(
+      hasTreatment: _treatment != null,
+      hasMedicine: _selectedMedicine != null,
+      reason: selectedReason,
+      confirmed: isConfirmed,
+    );
+  }
 
   Future<void> _submitRequest() async {
-    final String? validationError = RefillFormValidation.validate(
+    final String? validationError = RefillFormValidation.validateSingle(
       hasTreatment: _treatment != null,
-      hasMedicine: _refillSchedule != null,
+      hasMedicine: _selectedMedicine != null,
       reason: selectedReason,
-      quantity: quantity,
       confirmed: isConfirmed,
     );
     if (validationError != null) {
@@ -255,15 +300,15 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
     if (!_submitLock.tryLock()) return;
     setState(() {});
 
-    final MyTreatment treatment = _treatment!;
-    final MyMedicineSchedule schedule = _refillSchedule!;
+    final MyMedicineSchedule medicine = _selectedMedicine!;
     final String reason = selectedReason!;
 
     try {
+      // Satu permintaan untuk satu obat. Obat lain memerlukan permintaan baru.
       final Refill created = await _refillService.createRefill(
-        treatmentId: treatment.id,
-        medicineId: schedule.medicineId,
-        quantity: quantity,
+        treatmentId: medicine.treatmentId,
+        medicineId: medicine.medicineId,
+        quantity: RefillFormValidation.fixedQuantity,
         reason: reason,
       );
 
@@ -311,9 +356,11 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
   void _resetForm() {
     setState(() {
       selectedReason = null;
-      quantity = RefillQuantityField.minQuantity;
       isConfirmed = false;
+      _selectedMedicine = null;
     });
+    // Pasien dengan satu jenis obat tetap terisi otomatis setelah form bersih.
+    _syncSelectionWithOptions();
   }
 
   void _scrollToForm() {
@@ -403,10 +450,15 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
 
                   KeyedSubtree(
                     key: _formKey,
-                    child: RefillMedicineInfoCard(
-                      schedule: _refillSchedule,
-                      latestRefill: _latestRefill,
+                    child: RefillMedicinePicker(
+                      options: _medicineOptions,
+                      selected: _selectedMedicine,
+                      isLoading: _isLoadingSchedules,
                       errorMessage: _scheduleError ?? _treatmentError,
+                      enabled: !_submitLock.isLocked,
+                      onSelected: (MyMedicineSchedule? value) {
+                        setState(() => _selectedMedicine = value);
+                      },
                     ),
                   ),
 
@@ -425,21 +477,9 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
 
                   const SizedBox(height: 28),
 
-                  RefillQuantityField(
-                    quantity: quantity,
-                    enabled: !_submitLock.isLocked,
-                    onChanged: (value) {
-                      setState(() {
-                        quantity = value;
-                      });
-                    },
-                  ),
-
-                  const SizedBox(height: 28),
-
                   RefillSummarySection(
-                    medicineName: _refillSchedule?.displayName,
-                    quantity: quantity,
+                    medicineName: _selectedMedicine?.displayName,
+                    quantity: RefillFormValidation.fixedQuantity,
                     reason: selectedReason,
                   ),
 
@@ -459,7 +499,7 @@ class _MedicineRefillPageState extends State<MedicineRefillPage> {
                   const SizedBox(height: 20),
 
                   RefillSubmitButton(
-                    onPressed: _submitRequest,
+                    onPressed: _canSubmit ? _submitRequest : null,
                     isSubmitting: _submitLock.isLocked,
                   ),
 

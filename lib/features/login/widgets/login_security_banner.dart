@@ -38,7 +38,7 @@ class LoginSecurityBanner extends StatelessWidget {
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
-              'Data anda dilindungi oleh enkripsi standar medis.',
+              'Data Anda dilindungi dengan enkripsi untuk menjaga privasi.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: AppColors.healthPrimaryDark,
                     fontWeight: FontWeight.w500,

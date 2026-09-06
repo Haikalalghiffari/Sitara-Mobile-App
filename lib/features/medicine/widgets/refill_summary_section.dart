@@ -5,6 +5,9 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
 /// Ringkasan singkat sebelum `POST /refills`. Bukan langkah API terpisah.
+///
+/// Isinya mengikuti obat yang dipilih pasien. [quantity] hanya ditampilkan,
+/// tidak dapat diubah dari sini.
 class RefillSummarySection extends StatelessWidget {
   const RefillSummarySection({
     super.key,
@@ -21,7 +24,7 @@ class RefillSummarySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final String obat = medicineName?.trim().isNotEmpty == true
         ? medicineName!.trim()
-        : "Belum tersedia";
+        : "Belum dipilih";
     final String alasan = reason?.trim().isNotEmpty == true
         ? reason!.trim()
         : "Belum dipilih";
