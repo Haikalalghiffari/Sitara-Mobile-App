@@ -32,6 +32,10 @@ import '../utils/today_medication_picker.dart';
 import '../utils/vot_completion_guard.dart';
 import '../utils/vot_flow.dart';
 import '../utils/vot_screen_awake.dart';
+import '../utils/vot_debug_logger.dart';
+import '../models/vot_debug_state.dart';
+import '../widgets/vot_debug_panel.dart';
+import '../widgets/vot_debug_visual_overlay.dart';
 
 import '../widgets/ai_vot_top_bar.dart';
 import '../widgets/verification_action_button.dart';
@@ -93,10 +97,14 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   bool _isSyncingOnResume = false;
   bool _didLeave = false;
   bool _canTestAgain = false;
+  int _attemptCounter = 1;
+  DateTime _lastStreamHeartbeat = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _showDebugPanel = true;
 
   @override
   void initState() {
     super.initState();
+    VotDebugLogger.instance.initialize();
     unawaited(SystemChrome.setPreferredOrientations(<DeviceOrientation>[
       DeviceOrientation.portraitUp,
     ]));
@@ -1034,6 +1042,45 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     await _stopImageStream();
     unawaited(_recordingService.cleanUpTemporaryVideo());
     _drinkingMachine.reset();
+    
+    if (!isRetry) {
+      _attemptCounter = 1;
+      await VotDebugLogger.instance.clear();
+    }
+    _drinkingService.diagnostic.reset(_attemptCounter);
+    
+    VotDebugLogger.instance.log('[SESSION START]\ncamera=${_cameraController?.description.lensDirection.name}\norientation=${_cameraController?.description.sensorOrientation}\nretry=$isRetry');
+    
+    // Reset debug state untuk sesi baru.
+    _drinkingService.debugNotifier.update((VotDebugState s) {
+      s.streamActive = false;
+      s.faceDetected = false;
+      s.handDetected = false;
+      s.faceFrameCount = 0;
+      s.handFrameCount = 0;
+      s.totalFrames = 0;
+      s.distance = null;
+      s.minDistance = null;
+      s.maxDistance = null;
+      s.nearReached = false;
+      s.farReached = false;
+      s.withdrawingDetected = false;
+      s.currentStage = 'waiting';
+      s.maxStage = 'waiting';
+      s.sequenceCompleted = false;
+      s.faceLost = false;
+      s.handLost = false;
+      s.distanceNull = false;
+      s.timedOut = false;
+      s.diagnosticReason = '';
+      s.cameraStreamStalled = false;
+      s.handDataStale = false;
+      s.lastFrameTime = null;
+      s.thumbTipX = null;
+      s.indexTipX = null;
+      s.middleTipX = null;
+    });
+
     setState(() {
       _state = isRetry
           ? VotFlow.afterDrinkingRetry()
@@ -1046,6 +1093,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     try {
       await _drinkingService.ensureInitialized();
       await _startImageStream();
+      VotDebugLogger.instance.log('[VIDEO RECORDING START]');
       unawaited(_recordingService.startRecording(_cameraController));
       if (!mounted) return;
       _drinkingStartedAt = DateTime.now();
@@ -1053,7 +1101,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       setState(() {
         _isBusy = false;
       });
-    } catch (_) {
+    } catch (e) {
+      VotDebugLogger.instance.log('[ERROR]\nFailed to begin drinking: $e');
       if (!mounted) return;
       setState(() {
         _state = VerificationState.drinking;
@@ -1089,6 +1138,21 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
+    VotDebugLogger.instance.log('[TIMEOUT]\nmaxStageReached=${_drinkingMachine.maxStageReached.name}');
+    
+    _drinkingService.debugNotifier.update((VotDebugState s) {
+      s.timedOut = true;
+      s.diagnosticReason = 'TIMEOUT - max stage: ${_drinkingMachine.maxStageReached.name}';
+    });
+    
+    _drinkingService.diagnostic.printSummary(
+      currentState: _drinkingMachine.stage.name,
+      maxStateReached: _drinkingMachine.maxStageReached.name,
+      sequenceCompleted: false,
+      streamActive: _streaming,
+      videoRecording: _recordingService.isRecording,
+    );
+    
     unawaited(_completeAfterDrinking(
       drinkingVerified: false,
       failureReason: 'DRINKING_TIMEOUT',
@@ -1096,6 +1160,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   }
 
   Future<void> _retryDrinking() async {
+    VotDebugLogger.instance.log('[RETRY]');
+    _attemptCounter++;
     await _beginDrinking(isRetry: true);
   }
 
@@ -1104,8 +1170,21 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (controller == null || !controller.value.isInitialized) return;
     if (_streaming) return;
 
+    VotDebugLogger.instance.log('[IMAGE STREAM START]');
     await controller.startImageStream(_onCameraImage);
     _streaming = true;
+    _drinkingService.debugNotifier.update((VotDebugState s) {
+      s.streamActive = true;
+      s.recording = _recordingService.isRecording;
+      final cameraVal = _cameraController?.value;
+      if (cameraVal != null && cameraVal.previewSize != null) {
+        s.cameraResolution =
+            '${cameraVal.previewSize!.width.toInt()}x${cameraVal.previewSize!.height.toInt()}';
+      }
+      s.cameraLens = _cameraController?.description.lensDirection.name ?? '-';
+      s.sensorOrientation =
+          _cameraController?.description.sensorOrientation ?? 0;
+    });
   }
 
   Future<void> _stopImageStream() async {
@@ -1113,7 +1192,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (controller != null && _streaming) {
       try {
         await controller.stopImageStream();
-      } catch (_) {}
+        VotDebugLogger.instance.log('[IMAGE STREAM STOP]');
+      } catch (e) {
+        VotDebugLogger.instance.log('[ERROR]\nFailed to stop image stream: $e');
+      }
     }
     _streaming = false;
   }
@@ -1122,6 +1204,11 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (_state != VerificationState.drinking) return;
     final CameraController? controller = _cameraController;
     if (controller == null) return;
+    
+    final DateTime now = DateTime.now();
+    if (now.difference(_lastStreamHeartbeat).inSeconds >= 2) {
+      _lastStreamHeartbeat = now;
+    }
 
     final DrinkingObservation? observation = _drinkingService.observeFrame(
       image: image,
@@ -1139,7 +1226,40 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       now: DateTime.now(),
     );
 
+    // ── Update debug state with stage + diagnostic reason ──
+    _drinkingService.debugNotifier.update((VotDebugState s) {
+      s.currentStage = stage.name;
+      s.maxStage = _drinkingMachine.maxStageReached.name;
+      s.recording = _recordingService.isRecording;
+      s.streamActive = _streaming;
+
+      // Update near/far/withdraw flags.
+      if (s.distance != null && s.distance! <= s.nearThreshold) {
+        s.nearReached = true;
+      }
+      if (s.distance != null && s.distance! >= s.farThreshold) {
+        s.farReached = true;
+      }
+      if (stage == DrinkingStage.withdrawing ||
+          stage == DrinkingStage.completed) {
+        s.withdrawingDetected = true;
+      }
+      if (stage == DrinkingStage.completed) {
+        s.sequenceCompleted = true;
+      }
+
+      // ── Diagnostic reason ──
+      s.diagnosticReason = _computeDiagnosticReason(s, stage);
+    });
+
     if (stage == DrinkingStage.completed) {
+      _drinkingService.diagnostic.printSummary(
+        currentState: _drinkingMachine.stage.name,
+        maxStateReached: _drinkingMachine.maxStageReached.name,
+        sequenceCompleted: true,
+        streamActive: _streaming,
+        videoRecording: _recordingService.isRecording,
+      );
       unawaited(_completeAfterDrinking());
       return;
     }
@@ -1156,6 +1276,49 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (_feedbackMessage != hint) {
       setState(() => _feedbackMessage = hint);
     }
+  }
+
+  String _computeDiagnosticReason(VotDebugState s, DrinkingStage stage) {
+    if (stage == DrinkingStage.completed) {
+      return 'Sequence berhasil ✓';
+    }
+    if (!s.handDetected && !s.faceDetected) {
+      return 'Wajah dan tangan tidak terdeteksi';
+    }
+    if (!s.faceDetected) {
+      return 'Wajah tidak terdeteksi';
+    }
+    if (!s.handDetected) {
+      return 'Menunggu tangan terdeteksi';
+    }
+    if (s.handDataStale) {
+      return 'Tangan terdeteksi tetapi data stale (${s.handDataAge.inMilliseconds}ms)';
+    }
+    if (s.distance == null) {
+      return 'Wajah terdeteksi tetapi mulut tidak tersedia';
+    }
+    if (stage == DrinkingStage.waiting) {
+      return 'Menunggu deteksi tangan+obat';
+    }
+    if (stage == DrinkingStage.handWithMedicine) {
+      return 'Tangan terdeteksi, jarak=${s.distance!.toStringAsFixed(3)}';
+    }
+    if (stage == DrinkingStage.approachingMouth) {
+      if (s.distance! > s.farThreshold) {
+        return 'Jarak tangan ke mulut terlalu jauh (${s.distance!.toStringAsFixed(3)})';
+      }
+      return 'Mendekati mulut (${s.distance!.toStringAsFixed(3)})';
+    }
+    if (stage == DrinkingStage.nearMouth) {
+      return 'Near threshold tercapai! Minum lalu jauhkan tangan';
+    }
+    if (stage == DrinkingStage.withdrawing) {
+      if (s.distance! < s.farThreshold) {
+        return 'Near tercapai tetapi tangan belum cukup jauh (${s.distance!.toStringAsFixed(3)})';
+      }
+      return 'Menunggu withdrawing selesai';
+    }
+    return 'Jarak: ${s.distance!.toStringAsFixed(3)}';
   }
 
   Future<void> _completeAfterDrinking({
@@ -1558,17 +1721,107 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                     const SizedBox(height: AppSpacing.lg),
                     Expanded(
                       flex: 3,
-                      child: VerificationCameraView(
-                        state: _state,
-                        cameraStatus: _cameraStatus,
-                        controller: _cameraController,
-                        onRetryCamera: _retryCamera,
-                        detectionBox: _detectionBox,
-                        capturedImageSize: _capturedImageSize,
-                        detectionLabel: _detectionLabel,
-                        isFrontCamera:
-                            _cameraController?.description.lensDirection ==
-                            CameraLensDirection.front,
+                      child: Stack(
+                        children: [
+                          // ── Camera preview ──
+                          Positioned.fill(
+                            child: VerificationCameraView(
+                              state: _state,
+                              cameraStatus: _cameraStatus,
+                              controller: _cameraController,
+                              onRetryCamera: _retryCamera,
+                              detectionBox: _detectionBox,
+                              capturedImageSize: _capturedImageSize,
+                              detectionLabel: _detectionLabel,
+                              isFrontCamera:
+                                  _cameraController?.description.lensDirection ==
+                                  CameraLensDirection.front,
+                            ),
+                          ),
+
+                          // ── Visual overlay (circles, lines) ──
+                          if (_showDebugPanel &&
+                              _state == VerificationState.drinking)
+                            Positioned.fill(
+                              child: LayoutBuilder(
+                                builder: (BuildContext context,
+                                    BoxConstraints constraints) {
+                                  final Size previewSize = Size(
+                                    constraints.maxWidth,
+                                    constraints.maxHeight,
+                                  );
+                                  // Camera preview aspect ratio (portrait).
+                                  final cameraVal = _cameraController?.value;
+                                  double camAspect = 0.75; // default
+                                  if (cameraVal != null &&
+                                      cameraVal.previewSize != null) {
+                                    final ps = cameraVal.previewSize!;
+                                    final double pw =
+                                        ps.width < ps.height
+                                            ? ps.width
+                                            : ps.height;
+                                    final double ph =
+                                        ps.width > ps.height
+                                            ? ps.width
+                                            : ps.height;
+                                    camAspect = pw / ph;
+                                  }
+                                  return ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: VotDebugVisualOverlay(
+                                      notifier:
+                                          _drinkingService.debugNotifier,
+                                      previewSize: previewSize,
+                                      cameraPreviewAspect: camAspect,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+
+                          // ── Debug text panel (scrollable) ──
+                          if (_showDebugPanel)
+                            Positioned(
+                              top: 40,
+                              right: 4,
+                              bottom: 4,
+                              width: 180,
+                              child: VotDebugPanel(
+                                notifier:
+                                    _drinkingService.debugNotifier,
+                              ),
+                            ),
+
+                          // ── Debug toggle button ──
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: GestureDetector(
+                              onTap: () => setState(
+                                  () => _showDebugPanel = !_showDebugPanel),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _showDebugPanel
+                                      ? Colors.cyan.withValues(alpha: 0.8)
+                                      : Colors.black54,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _showDebugPanel
+                                      ? '🐞 HIDE'
+                                      : '🐞 DEBUG',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Flexible(

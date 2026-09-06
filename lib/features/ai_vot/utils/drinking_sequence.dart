@@ -128,6 +128,10 @@ class DrinkingSequenceMachine {
       maxStageReached = next;
     }
     if (stage == next) return;
+    
+    // LOG TRANSISI STATE MACHINE
+    print('[VOT STATE]\n${stage.name}\n-> ${next.name}\n');
+    
     stage = next;
     _enteredAt = now;
   }

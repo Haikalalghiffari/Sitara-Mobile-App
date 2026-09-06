@@ -48,6 +48,7 @@ dependencies:
   mediapipe_face_mesh: ^2.8.0
   hand_landmarker: ^3.0.1
   url_launcher: ^6.3.2
+  intl: ^0.20.3
 
 dev_dependencies:
   flutter_test:
