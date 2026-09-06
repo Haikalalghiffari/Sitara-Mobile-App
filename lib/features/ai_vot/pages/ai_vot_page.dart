@@ -180,9 +180,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
-    if (_state == VerificationState.drinking && !_phaseError) {
-      unawaited(_startImageStream());
-    }
+    // Post-recording: tidak perlu memulai image stream saat drinking
   }
 
   Future<void> _continueAfterRegistrationCheck() async {
@@ -977,8 +975,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
           _phaseError = false;
           _isBusy = false;
         });
-        if (!mounted) return;
-        await _beginDrinking();
         return;
       }
 
@@ -1033,25 +1029,34 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     _cancelDrinkingTimeout();
     await _stopImageStream();
     unawaited(_recordingService.cleanUpTemporaryVideo());
-    _drinkingMachine.reset();
     setState(() {
       _state = isRetry
           ? VotFlow.afterDrinkingRetry()
           : VerificationState.drinking;
       _isBusy = true;
       _phaseError = false;
-      _feedbackMessage = "Minum obat seperti biasa, lalu jauhkan dari mulut.";
+      _detectionBox = null;
+      _detectionLabel = null;
+      _feedbackMessage = "Menyiapkan perekaman...";
     });
 
     try {
-      await _drinkingService.ensureInitialized();
-      await _startImageStream();
-      unawaited(_recordingService.startRecording(_cameraController));
+      final bool started =
+          await _recordingService.startRecording(_cameraController);
       if (!mounted) return;
+      if (!started) {
+        setState(() {
+          _phaseError = true;
+          _isBusy = false;
+          _feedbackMessage = _recordingService.errorMessage ??
+              "Gagal memulai perekaman video. Silakan coba lagi.";
+        });
+        return;
+      }
       _drinkingStartedAt = DateTime.now();
-      _armDrinkingTimeout();
       setState(() {
         _isBusy = false;
+        _feedbackMessage = "Sedang merekam... Silakan minum obat Anda.";
       });
     } catch (_) {
       if (!mounted) return;
@@ -1060,7 +1065,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         _phaseError = true;
         _isBusy = false;
         _feedbackMessage =
-            "MediaPipe tidak dapat dijalankan. Periksa kamera lalu coba lagi.";
+            "Gagal memulai perekaman video. Silakan coba lagi.";
       });
     }
   }
@@ -1097,6 +1102,95 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   Future<void> _retryDrinking() async {
     await _beginDrinking(isRetry: true);
+  }
+
+  /// Dipanggil saat pasien menekan tombol "Selesai Minum Obat".
+  ///
+  /// Menghentikan perekaman, memvalidasi file MP4, mengunggah video,
+  /// dan mengirim status ke backend untuk manual review.
+  /// AI video analysis belum diimplementasikan pada tahap ini.
+  Future<void> _onFinishDrinkingPressed() async {
+    if (_state != VerificationState.drinking || _isBusy) return;
+    if (!_completionGuard.tryBegin()) return;
+
+    setState(() {
+      _isBusy = true;
+      _phaseError = false;
+      _feedbackMessage = "Menghentikan perekaman...";
+    });
+
+    // 1. Stop recording
+    final XFile? recordedFile =
+        await _recordingService.stopRecording(_cameraController);
+    if (!mounted) return;
+
+    if (recordedFile == null) {
+      _completionGuard.markFailure();
+      setState(() {
+        _phaseError = true;
+        _isBusy = false;
+        _feedbackMessage = "Perekaman video gagal. Silakan coba lagi.";
+      });
+      return;
+    }
+
+    // 2. Validate video file
+    final File videoFile = File(recordedFile.path);
+    final bool fileExists = videoFile.existsSync();
+    final int fileSize = fileExists ? videoFile.lengthSync() : 0;
+
+    debugPrint(
+      '[VOT] Video recorded: path=${recordedFile.path}, '
+      'exists=$fileExists, size=$fileSize bytes',
+    );
+
+    if (!fileExists || fileSize <= 0) {
+      _completionGuard.markFailure();
+      setState(() {
+        _phaseError = true;
+        _isBusy = false;
+        _feedbackMessage =
+            "File video tidak valid (kosong atau tidak ditemukan). "
+            "Silakan coba lagi.";
+      });
+      return;
+    }
+
+    // 3. Upload video
+    if (!mounted) return;
+    setState(() {
+      _feedbackMessage = "Mengunggah video...";
+    });
+
+    final int? dailyId = _dailyMedicationId;
+    if (dailyId != null) {
+      try {
+        await _votService.uploadVideo(
+          dailyMedicationId: dailyId,
+          videoPath: recordedFile.path,
+        );
+      } catch (_) {
+        debugPrint('[VOT] Video upload failed, continuing to complete.');
+      }
+    }
+
+    if (!mounted) return;
+
+    // 4. Complete session
+    // AI video analysis belum diimplementasikan pada tahap ini.
+    // Kirim drinking_verified: false dengan alasan AI_ANALYSIS_PENDING.
+    // Video sudah terupload untuk manual review oleh Nakes.
+    setState(() {
+      _state = VotFlow.afterLocalDrinkingCompleted();
+      _feedbackMessage =
+          "Video berhasil direkam. Mengirim untuk pemeriksaan...";
+    });
+
+    await _submitCompleteRequest(
+      drinkingVerified: false,
+      maxDrinkingStage: 'post_recording',
+      failureReason: 'AI_ANALYSIS_PENDING',
+    );
   }
 
   Future<void> _startImageStream() async {
@@ -1223,35 +1317,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _retryComplete() async {
     if (!_completionGuard.tryBegin()) return;
 
-    final String maxStage = _drinkingMachine.maxStageReached.name;
-    final Map<String, Object>? body = VotFlow.completeRequestBody(
-      _dailyMedicationId,
-      drinkingVerified: true,
-      maxDrinkingStage: maxStage,
-    );
-    if (body == null) {
-      _completionGuard.markFailure();
-      if (!mounted) return;
-      setState(() {
-        _state = VerificationState.completing;
-        _phaseError = true;
-        _isBusy = false;
-        _feedbackMessage =
-            "ID sesi VOT tidak tersedia. Tidak dapat menyelesaikan verifikasi.";
-      });
-      return;
-    }
-
     setState(() {
       _state = VerificationState.completing;
       _isBusy = true;
       _phaseError = false;
-      _feedbackMessage = "Memverifikasi proses minum...";
+      _feedbackMessage = "Mengirim ulang untuk pemeriksaan...";
     });
 
     await _submitCompleteRequest(
-      drinkingVerified: true,
-      maxDrinkingStage: maxStage,
+      drinkingVerified: false,
+      maxDrinkingStage: 'post_recording',
+      failureReason: 'AI_ANALYSIS_PENDING',
     );
   }
 
@@ -1298,31 +1374,17 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
 
-      if (result.isNeedsReview || !result.canRetry) {
-        _completionGuard.markSuccess();
-        unawaited(_recordingService.cleanUpTemporaryVideo());
-        setState(() {
-          _state = VerificationState.needsReview;
-          _isBusy = false;
-          _phaseError = false;
-          _feedbackMessage = result.message.isNotEmpty
-              ? result.message
-              : "Verifikasi memerlukan pemeriksaan tenaga kesehatan. Bukti video telah disimpan.";
-        });
-        unawaited(_refreshCanTestAgain());
-        return;
-      }
-
-      // Can retry drinking
-      _completionGuard.markFailure();
+      // Selalu anggap sebagai needsReview (menunggu verifikasi Nakes)
+      _completionGuard.markSuccess();
+      unawaited(_recordingService.cleanUpTemporaryVideo());
       setState(() {
-        _state = VerificationState.drinking;
+        _state = VerificationState.needsReview;
         _isBusy = false;
-        _phaseError = true;
-        _feedbackMessage = result.message.isNotEmpty
-            ? result.message
-            : "Proses minum belum terverifikasi. Silakan coba lagi.";
+        _phaseError = false;
+        _feedbackMessage =
+            "Video minum obat berhasil dikirim. Laporan Anda sedang menunggu verifikasi tenaga kesehatan.";
       });
+      unawaited(_refreshCanTestAgain());
     } on ApiException catch (error) {
       _completionGuard.markFailure();
       if (!mounted) return;
@@ -1331,7 +1393,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
       setState(() {
-        _state = VerificationState.drinking;
+        _state = VerificationState.completing;
         _isBusy = false;
         _phaseError = true;
         _feedbackMessage = error.message;
@@ -1340,7 +1402,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _completionGuard.markFailure();
       if (!mounted) return;
       setState(() {
-        _state = VerificationState.drinking;
+        _state = VerificationState.completing;
         _isBusy = false;
         _phaseError = true;
         _feedbackMessage = ApiException.unexpectedMessage;
@@ -1360,10 +1422,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   String _medicineSuccessMessage(VotMedicineDetectResult result) {
     final String name = result.detectedMedicine ?? result.expectedMedicine;
     final String conf = (result.confidence * 100).toStringAsFixed(0);
-    if (result.message.isNotEmpty) {
-      return "${result.message} ($name, $conf%)";
-    }
-    return "Obat sesuai dengan jadwal. ($name, $conf%)";
+    return "Obat terdeteksi: $name ($conf%). Silakan tekan tombol Mulai Rekam.";
   }
 
   Future<Size?> _readImageSize(String path) async {
@@ -1610,7 +1669,13 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                               onRetryMedicine: canAct
                                   ? _captureAndDetectMedicine
                                   : null,
+                              onStartRecording: canAct
+                                  ? () => _beginDrinking()
+                                  : null,
                               onRetryDrinking: canAct ? _retryDrinking : null,
+                              onFinishDrinking: canAct
+                                  ? _onFinishDrinkingPressed
+                                  : null,
                               onRetryComplete: !_isBusy ? _retryComplete : null,
                               onFinish: () => unawaited(_leaveVot()),
                               onTestAgain: _canTestAgain && !_isBusy

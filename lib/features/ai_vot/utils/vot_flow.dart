@@ -10,7 +10,7 @@ class VotFlow {
     }
     return switch (votStep) {
       'face_verified' => VerificationState.medicineDetecting,
-      'medicine_matched' || 'drinking' => VerificationState.drinking,
+      'medicine_matched' || 'drinking' => VerificationState.medicineMatched,
       'verified' => VerificationState.completed,
       _ => VerificationState.faceVerifying,
     };
@@ -82,18 +82,15 @@ class VotFlow {
     bool canRetry = false,
   }) {
     if (serverVerified) return VerificationState.completed;
-    if (isNeedsReview) return VerificationState.needsReview;
-    if (canRetry) return VerificationState.drinking;
-    return VerificationState.completing;
+    return VerificationState.needsReview;
   }
 
-  /// Timeout/gagal minum: tetap DRINKING agar face+obat tidak diulang.
+  /// Timeout/gagal minum: langsung needsReview.
   static VerificationState afterDrinkingTimeout({
     bool canRetry = true,
     bool isNeedsReview = false,
   }) {
-    if (isNeedsReview || !canRetry) return VerificationState.needsReview;
-    return VerificationState.drinking;
+    return VerificationState.needsReview;
   }
 
   static VerificationState afterDrinkingRetry() {

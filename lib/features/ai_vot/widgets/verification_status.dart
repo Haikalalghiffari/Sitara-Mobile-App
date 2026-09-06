@@ -13,6 +13,7 @@ Color verificationStatusColor(VerificationState state) {
     VerificationState.faceVerified ||
     VerificationState.medicineMatched ||
     VerificationState.completed => AppColors.success,
+    VerificationState.drinking => AppColors.error,
     _ => AppColors.warning,
   };
 }

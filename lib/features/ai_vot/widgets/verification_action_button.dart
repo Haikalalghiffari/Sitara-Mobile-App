@@ -15,7 +15,9 @@ class VerificationActionButton extends StatelessWidget {
     this.onRetryFace,
     this.onDetectMedicine,
     this.onRetryMedicine,
+    this.onStartRecording,
     this.onRetryDrinking,
+    this.onFinishDrinking,
     this.onRetryComplete,
     this.onFinish,
     this.onTestAgain,
@@ -28,7 +30,9 @@ class VerificationActionButton extends StatelessWidget {
   final VoidCallback? onRetryFace;
   final VoidCallback? onDetectMedicine;
   final VoidCallback? onRetryMedicine;
+  final VoidCallback? onStartRecording;
   final VoidCallback? onRetryDrinking;
+  final VoidCallback? onFinishDrinking;
   final VoidCallback? onRetryComplete;
   final VoidCallback? onFinish;
   final VoidCallback? onTestAgain;
@@ -138,11 +142,16 @@ class VerificationActionButton extends StatelessWidget {
               Icons.medication_outlined,
               onDetectMedicine,
             ),
+      VerificationState.medicineMatched => (
+          "Mulai Rekam",
+          Icons.videocam_rounded,
+          onStartRecording,
+        ),
       VerificationState.drinking => hasPhaseError
-          ? ("Coba Lagi", Icons.refresh_rounded, onRetryDrinking)
-          : (state.statusLabel, null, null),
+          ? ("Mulai Rekam Lagi", Icons.refresh_rounded, onRetryDrinking)
+          : ("Selesai Minum Obat", Icons.stop_circle_outlined, onFinishDrinking),
       VerificationState.completing => hasPhaseError
-          ? ("Coba Lagi", Icons.refresh_rounded, onRetryComplete)
+          ? ("Kirim Ulang", Icons.refresh_rounded, onRetryComplete)
           : (state.statusLabel, null, null),
       VerificationState.completed => (
           "Selesai",

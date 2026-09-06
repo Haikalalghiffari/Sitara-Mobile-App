@@ -46,4 +46,6 @@ flutter {
 
 dependencies {
     implementation("androidx.concurrent:concurrent-futures:1.2.0")
+    implementation("com.google.mediapipe:tasks-vision:0.10.29")
 }
+

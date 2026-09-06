@@ -22,11 +22,11 @@ extension VerificationStateX on VerificationState {
         VerificationState.faceVerifying => "Memverifikasi wajah...",
         VerificationState.faceVerified => "Wajah terverifikasi",
         VerificationState.medicineDetecting => "Mendeteksi obat...",
-        VerificationState.medicineMatched => "Obat sesuai",
-        VerificationState.drinking => "Verifikasi visual proses minum",
-        VerificationState.completing => "Memverifikasi proses minum...",
-        VerificationState.completed => "Verifikasi minum obat berhasil",
-        VerificationState.needsReview => "Menunggu pemeriksaan nakes",
+        VerificationState.medicineMatched => "Obat terdeteksi",
+        VerificationState.drinking => "Sedang merekam...",
+        VerificationState.completing => "Mengirim video...",
+        VerificationState.completed => "Verifikasi selesai",
+        VerificationState.needsReview => "Menunggu verifikasi nakes",
       };
 
   String get instruction => switch (this) {
@@ -38,13 +38,14 @@ extension VerificationStateX on VerificationState {
         VerificationState.faceVerified => "Wajah terverifikasi. Siapkan obat",
         VerificationState.medicineDetecting =>
           "Letakkan obat di dalam kotak",
-        VerificationState.medicineMatched => "Obat sesuai jadwal",
+        VerificationState.medicineMatched =>
+          "Tekan 'Mulai Rekam' untuk merekam proses minum obat",
         VerificationState.drinking =>
-          "Minum obat seperti biasa di depan kamera",
-        VerificationState.completing => "Memverifikasi proses minum...",
+          "Silakan minum obat Anda di depan kamera, lalu tekan Selesai Minum Obat",
+        VerificationState.completing => "Sedang mengunggah dan memproses...",
         VerificationState.completed => "Verifikasi minum obat berhasil.",
         VerificationState.needsReview =>
-          "Video proses minum telah disimpan sebagai bukti. Silakan tunggu pemeriksaan dari tenaga kesehatan.",
+          "Video minum obat berhasil dikirim. Menunggu verifikasi tenaga kesehatan.",
       };
 
   bool get isProcessing => switch (this) {
