@@ -203,8 +203,8 @@ class TreatmentProgress {
 
   /// Hari terapi yang sudah berjalan, termasuk hari ini.
   ///
-  /// Dipakai bersama oleh [ProgressTimelineCard] dan [ProgressStreakCard]
-  /// agar angka streak sama dengan "Hari ke-n" pada timeline.
+  /// Menggambarkan lamanya terapi berjalan, bukan kepatuhan dan bukan streak.
+  /// Runtutan harian memakai `streak_days` dari `GET /medications/progress`.
   final int elapsedDays;
   final int totalDays;
   final int elapsedWeeks;
@@ -213,24 +213,14 @@ class TreatmentProgress {
   /// 0.0 sampai 1.0, untuk [LinearProgressIndicator].
   final double fraction;
 
+  /// Porsi masa terapi yang sudah dijalani, 0–100.
+  ///
+  /// Ini progres durasi terapi, bukan kepatuhan. Angka kepatuhan berasal dari
+  /// `adherence_percentage` pada `GET /medications/progress`.
   int get percent {
     final int value = (fraction * 100).round();
     if (value < 0) return 0;
     if (value > 100) return 100;
     return value;
-  }
-
-  /// Temporary assumption: pasien dianggap selalu patuh selama hari terapi
-  /// yang sudah berjalan. Bernilai null bila terapi belum dimulai.
-  ///
-  /// Bukan hasil AI VOT dan bukan hasil verifikasi dosis.
-  ///
-  // TODO: Saat backend sudah menyediakan actual medication adherence /
-  // verified medication intake, ganti asumsi 100% ini dengan data aktual
-  // untuk Progress dan Profile. Jangan menghitung kepatuhan dari
-  // therapy_start_date / therapy_end_date lagi.
-  double? get assumedAdherence {
-    if (elapsedDays <= 0) return null;
-    return 1.0;
   }
 }

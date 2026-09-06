@@ -6,34 +6,39 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-import '../models/my_treatment.dart';
+import '../models/patient_progress.dart';
 
 /// Kartu kepatuhan keseluruhan.
 ///
-/// Backend belum menyediakan data dosis yang diminum atau terverifikasi.
-/// Sementara ini, bila terapi sudah berjalan, nilai yang ditampilkan adalah
-/// 100% sebagai **asumsi sementara** bahwa pasien patuh setiap hari sejak
-/// `therapy_start_date`. Bukan hasil AI VOT, bukan hasil verifikasi dosis.
-///
-// TODO: Saat backend sudah memiliki data actual medication adherence /
-// verified medication intake dari AI VOT atau medication verification, ganti
-// asumsi 100% ini dengan data aktual. Jangan menghitung kepatuhan dari
-// therapy_start_date / therapy_end_date lagi.
+/// Seluruh angka berasal dari `GET /medications/progress`. Aplikasi tidak
+/// menghitung ulang kepatuhan, tidak membagi successful dengan total, dan
+/// tidak memakai tanggal terapi sebagai kepatuhan. Bila backend mengirim
+/// `adherence_percentage` null, kartu menampilkan keadaan belum ada data,
+/// bukan 100%.
 class ProgressSummaryCard extends StatelessWidget {
   const ProgressSummaryCard({
     super.key,
-    this.progress,
+    this.patientProgress,
+    this.isLoading = false,
     this.errorMessage,
   });
 
-  /// Perhitungan waktu terapi yang sama dengan [ProgressTimelineCard].
-  final TreatmentProgress? progress;
+  /// Ringkasan kepatuhan dari backend. Null selama memuat atau saat gagal.
+  final PatientProgress? patientProgress;
+
+  final bool isLoading;
 
   final String? errorMessage;
 
+  static const String noAdherenceMessage = 'Belum ada data kepatuhan';
+
+  static const String loadingMessage = 'Memuat data kepatuhan...';
+
   @override
   Widget build(BuildContext context) {
-    final double? adherence = progress?.assumedAdherence;
+    final PatientProgress? summary = patientProgress;
+    final double? adherence = summary?.adherenceFraction;
+    final String? adherenceLabel = summary?.adherenceLabel;
 
     return Container(
       width: double.infinity,
@@ -66,9 +71,7 @@ class ProgressSummaryCard extends StatelessWidget {
                   children: [
 
                     Text(
-                      adherence == null
-                          ? "—"
-                          : "${(adherence * 100).round()}%",
+                      adherenceLabel ?? "—",
                       style: Theme.of(context)
                           .textTheme
                           .headlineMedium
@@ -110,10 +113,7 @@ class ProgressSummaryCard extends StatelessWidget {
           const SizedBox(height: 14),
 
           Text(
-            adherence == null
-                ? (errorMessage ??
-                    "Data kepatuhan belum tersedia. Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.")
-                : "Kepatuhan pengobatan Anda saat ini sangat baik.",
+            _description(summary),
             textAlign: TextAlign.center,
             style: Theme.of(context)
                 .textTheme
@@ -121,6 +121,82 @@ class ProgressSummaryCard extends StatelessWidget {
                 ?.copyWith(
                   color: AppColors.textSecondary,
                   height: 1.6,
+                ),
+          ),
+
+          // Rincian occurrence ditampilkan apa adanya dari backend, tanpa
+          // dijumlahkan atau dibagi di aplikasi.
+          if (summary != null) ...[
+            const SizedBox(height: 20),
+
+            _breakdownRow(
+              context,
+              label: "Terverifikasi",
+              value: summary.successfulOccurrences,
+            ),
+
+            _breakdownRow(
+              context,
+              label: "Gagal",
+              value: summary.failedOccurrences,
+            ),
+
+            _breakdownRow(
+              context,
+              label: "Menunggu pemeriksaan",
+              value: summary.pendingReviewOccurrences,
+            ),
+
+            _breakdownRow(
+              context,
+              label: "Sudah jatuh tempo",
+              value: summary.finalDueOccurrences,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Teks penjelas mengikuti keadaan data, tanpa penilaian karangan.
+  String _description(PatientProgress? summary) {
+    if (summary == null) {
+      if (isLoading) return loadingMessage;
+      if (errorMessage != null) return errorMessage!;
+      return "Data kepatuhan belum tersedia. Informasi perkembangan pengobatan akan muncul setelah data pengobatan tersedia.";
+    }
+
+    if (!summary.hasAdherence) {
+      return "$noAdherenceMessage. Kepatuhan akan muncul setelah ada jadwal minum obat yang jatuh tempo.";
+    }
+
+    return "${summary.successfulOccurrences} dari "
+        "${summary.finalDueOccurrences} jadwal yang sudah jatuh tempo "
+        "terverifikasi.";
+  }
+
+  Widget _breakdownRow(
+    BuildContext context, {
+    required String label,
+    required int value,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+            ),
+          ),
+
+          Text(
+            "$value",
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
           ),
         ],

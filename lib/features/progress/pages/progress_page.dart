@@ -8,6 +8,8 @@ import '../../../shared/widgets/sitara_app_bar.dart';
 import '../../../shared/widgets/sitara_bottom_nav_bar.dart';
 
 import '../models/my_treatment.dart';
+import '../models/patient_progress.dart';
+import '../services/patient_progress_service.dart';
 import '../services/treatment_service.dart';
 import '../widgets/progress_summary_card.dart';
 import '../widgets/progress_streak_card.dart';
@@ -21,25 +23,110 @@ import '../../medicine/pages/medicine_page.dart';
 import '../../profile/pages/profile_page.dart';
 
 class ProgressPage extends StatefulWidget {
-  const ProgressPage({super.key});
+  const ProgressPage({
+    super.key,
+    this.treatmentService,
+    this.patientProgressService,
+  });
+
+  /// Hanya untuk pengujian. Produksi memakai service default.
+  final TreatmentService? treatmentService;
+
+  /// Hanya untuk pengujian. Produksi memakai service default.
+  final PatientProgressService? patientProgressService;
 
   @override
   State<ProgressPage> createState() => _ProgressPageState();
 }
 
-class _ProgressPageState extends State<ProgressPage> {
+class _ProgressPageState extends State<ProgressPage>
+    with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
-  final TreatmentService _treatmentService = TreatmentService();
+
+  late final TreatmentService _treatmentService =
+      widget.treatmentService ?? TreatmentService();
+
+  late final PatientProgressService _patientProgressService =
+      widget.patientProgressService ?? PatientProgressService();
 
   List<MyTreatment> _treatments = <MyTreatment>[];
   String? _treatmentError;
+
+  PatientProgress? _patientProgress;
+  String? _patientProgressError;
+  bool _isLoadingProgress = true;
 
   @override
   void initState() {
     super.initState();
     // Dipanggil sekali di sini, bukan di build(), agar tidak ada request
     // berulang setiap kali widget di-rebuild.
+    WidgetsBinding.instance.addObserver(this);
     _loadTreatments();
+    _loadPatientProgress();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Menyegarkan saat aplikasi kembali ke depan, mengikuti pola observer yang
+  /// sudah dipakai halaman lain. Bukan polling: tidak ada timer.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.resumed) return;
+    if (!mounted) return;
+
+    _loadTreatments();
+    _loadPatientProgress();
+  }
+
+  /// `GET /medications/progress`. Angka kepatuhan dan streak diterima apa
+  /// adanya dari backend, tanpa perhitungan ulang di aplikasi.
+  Future<void> _loadPatientProgress() async {
+    if (mounted && !_isLoadingProgress) {
+      setState(() {
+        _isLoadingProgress = true;
+        _patientProgressError = null;
+      });
+    }
+
+    try {
+      final PatientProgress progress =
+          await _patientProgressService.getMyProgress();
+
+      if (!mounted) return;
+
+      setState(() {
+        _patientProgress = progress;
+        _patientProgressError = null;
+        _isLoadingProgress = false;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _patientProgress = null;
+        _patientProgressError = error.message;
+        _isLoadingProgress = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _patientProgress = null;
+        _patientProgressError = ApiException.unexpectedMessage;
+        _isLoadingProgress = false;
+      });
+    }
   }
 
   Future<void> _loadTreatments() async {
@@ -129,16 +216,21 @@ class _ProgressPageState extends State<ProgressPage> {
 
                             const SizedBox(height: 28),
 
+                            // Kepatuhan dan runtutan harian berasal dari
+                            // GET /medications/progress, terpisah dari durasi
+                            // terapi pada dua kartu di bawahnya.
                             ProgressSummaryCard(
-                              progress: _currentTreatment?.progress,
-                              errorMessage: _treatmentError,
+                              patientProgress: _patientProgress,
+                              isLoading: _isLoadingProgress,
+                              errorMessage: _patientProgressError,
                             ),
 
                             const SizedBox(height: 24),
 
                             ProgressStreakCard(
-                              progress: _currentTreatment?.progress,
-                              errorMessage: _treatmentError,
+                              patientProgress: _patientProgress,
+                              isLoading: _isLoadingProgress,
+                              errorMessage: _patientProgressError,
                             ),
 
                             const SizedBox(height: 24),

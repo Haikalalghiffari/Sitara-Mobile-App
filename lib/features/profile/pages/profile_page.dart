@@ -25,6 +25,8 @@ import '../models/patient_profile.dart';
 import '../services/patient_service.dart';
 
 import '../../progress/models/my_treatment.dart';
+import '../../progress/models/patient_progress.dart';
+import '../../progress/services/patient_progress_service.dart';
 import '../../progress/services/treatment_service.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -38,6 +40,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final AuthService _authService = AuthService();
   final PatientService _patientService = PatientService();
   final TreatmentService _treatmentService = TreatmentService();
+  final PatientProgressService _patientProgressService =
+      PatientProgressService();
 
   UserProfile? _userProfile;
   PatientProfile? _patientProfile;
@@ -46,6 +50,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   List<MyTreatment> _treatments = <MyTreatment>[];
 
+  /// Kepatuhan pada kartu profil memakai sumber yang sama dengan Progress,
+  /// yaitu `GET /medications/progress`. Null selama belum tersedia.
+  PatientProgress? _patientProgress;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +61,31 @@ class _ProfilePageState extends State<ProfilePage> {
     // berulang setiap kali widget di-rebuild.
     _loadProfile();
     _loadTreatments();
+    _loadPatientProgress();
+  }
+
+  Future<void> _loadPatientProgress() async {
+    try {
+      final PatientProgress progress =
+          await _patientProgressService.getMyProgress();
+
+      if (!mounted) return;
+
+      setState(() => _patientProgress = progress);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() => _patientProgress = null);
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() => _patientProgress = null);
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -190,6 +223,7 @@ class _ProfilePageState extends State<ProfilePage> {
         patient: patient,
         user: user,
         progress: _currentTreatment?.progress,
+        patientProgress: _patientProgress,
       );
     }
 
