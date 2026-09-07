@@ -40,6 +40,7 @@ void main() {
       'failure_reason': null,
     });
     expect(result.verified, isTrue);
+    expect(result.identityAccepted, isTrue);
     expect(result.faceVerificationId, 7);
     expect(result.votStep, 'face_verified');
     expect(result.attemptCount, 1);
@@ -61,6 +62,7 @@ void main() {
       'message': 'Wajah tidak cocok.',
     });
     expect(result.verified, isFalse);
+    expect(result.identityAccepted, isFalse);
     expect(result.attemptCount, 0);
     expect(result.canRetry, isTrue);
     expect(result.failureReason, isNull);

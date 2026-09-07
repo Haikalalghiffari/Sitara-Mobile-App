@@ -1,3 +1,5 @@
+import '../utils/face_identity_threshold.dart';
+
 /// Response `POST /vot/face-verify`.
 class VotFaceVerifyResult {
   const VotFaceVerifyResult({
@@ -27,6 +29,12 @@ class VotFaceVerifyResult {
   final int attemptCount;
   final bool canRetry;
   final String? failureReason;
+
+  /// Keputusan identitas tahap FACE: `similarity_score >= 0.63`.
+  ///
+  /// Tidak memakai [verified] backend sebagai sumber ambang, agar batas
+  /// 0.63 dikunci di aplikasi untuk sesi VOT.
+  bool get identityAccepted => FaceIdentityThreshold.isMet(similarityScore);
 
   factory VotFaceVerifyResult.fromJson(Map<String, dynamic> json) {
     return VotFaceVerifyResult(

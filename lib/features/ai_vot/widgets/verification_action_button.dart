@@ -16,6 +16,8 @@ class VerificationActionButton extends StatelessWidget {
     this.onDetectMedicine,
     this.onRetryMedicine,
     this.onRetryDrinking,
+    this.onStopDrinking,
+    this.drinkingVideoReady = false,
     this.onRetryComplete,
     this.onFinish,
     this.onTestAgain,
@@ -29,6 +31,8 @@ class VerificationActionButton extends StatelessWidget {
   final VoidCallback? onDetectMedicine;
   final VoidCallback? onRetryMedicine;
   final VoidCallback? onRetryDrinking;
+  final VoidCallback? onStopDrinking;
+  final bool drinkingVideoReady;
   final VoidCallback? onRetryComplete;
   final VoidCallback? onFinish;
   final VoidCallback? onTestAgain;
@@ -140,7 +144,13 @@ class VerificationActionButton extends StatelessWidget {
             ),
       VerificationState.drinking => hasPhaseError
           ? ("Coba Lagi", Icons.refresh_rounded, onRetryDrinking)
-          : (state.statusLabel, null, null),
+          : drinkingVideoReady
+              ? ("Video Tersimpan", Icons.check_rounded, null)
+              : (
+                  "Selesai Minum",
+                  Icons.stop_circle_outlined,
+                  onStopDrinking,
+                ),
       VerificationState.completing => hasPhaseError
           ? ("Coba Lagi", Icons.refresh_rounded, onRetryComplete)
           : (state.statusLabel, null, null),

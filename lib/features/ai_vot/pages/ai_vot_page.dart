@@ -98,6 +98,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   bool _isSyncingOnResume = false;
   bool _didLeave = false;
   bool _canTestAgain = false;
+  bool _drinkingVideoReady = false;
 
   @override
   void initState() {
@@ -130,14 +131,32 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     _cancelDrinkingTimeout();
     _cancelScheduleWatch();
     unawaited(_screenAwake.disable());
-    unawaited(_stopImageStream());
     unawaited(_drinkingService.dispose());
-    unawaited(_recordingService.stopRecording(_cameraController));
-    unawaited(_recordingService.cleanUpTemporaryVideo());
     final CameraController? controller = _cameraController;
     _cameraController = null;
-    unawaited(controller?.dispose() ?? Future<void>.value());
+    unawaited(_disposeRecordingThenCamera(controller));
     super.dispose();
+  }
+
+  Future<void> _disposeRecordingThenCamera(
+    CameraController? controller,
+  ) async {
+    await _stopImageStream();
+    try {
+      await _recordingService.stopRecording(controller);
+    } catch (error, stack) {
+      debugPrint('[AiVotPage] dispose stopRecording: $error\n$stack');
+    }
+    try {
+      await _recordingService.cleanUpTemporaryVideo();
+    } catch (error, stack) {
+      debugPrint('[AiVotPage] dispose cleanup: $error\n$stack');
+    }
+    try {
+      await controller?.dispose();
+    } catch (error, stack) {
+      debugPrint('[AiVotPage] dispose camera: $error\n$stack');
+    }
   }
 
   @override
@@ -185,9 +204,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
-    if (_state == VerificationState.drinking && !_phaseError) {
-      unawaited(_startImageStream());
-    }
   }
 
   Future<void> _continueAfterRegistrationCheck() async {
@@ -583,6 +599,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _completionGuard.reset();
       // Sesi berganti jadwal: identitas harus diverifikasi ulang.
       _identityLock.reset();
+      _drinkingVideoReady = false;
+      await _recordingService.stopRecording(_cameraController);
+      await _recordingService.cleanUpTemporaryVideo();
 
       if (!mounted) return;
       setState(() {
@@ -624,6 +643,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     _didLeave = true;
     // Keluar dari halaman VOT membatalkan kunci identitas sesi.
     _identityLock.reset();
+    _drinkingVideoReady = false;
     _cancelDrinkingTimeout();
     await _stopImageStream();
     await _drinkingService.dispose();
@@ -887,7 +907,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       );
       if (!mounted) return;
 
-      if (result.verified) {
+      if (result.identityAccepted) {
         // Identitas terkunci untuk sisa sesi ini.
         _identityLock.lock(now: DateTime.now());
 
@@ -1064,7 +1084,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _beginDrinking({bool isRetry = false}) async {
     _cancelDrinkingTimeout();
     await _stopImageStream();
-    unawaited(_recordingService.cleanUpTemporaryVideo());
     _drinkingMachine.reset();
     setState(() {
       _state = isRetry
@@ -1072,31 +1091,68 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
           : VerificationState.drinking;
       _isBusy = true;
       _phaseError = false;
-      _feedbackMessage = "Minum obat seperti biasa, lalu jauhkan dari mulut.";
+      _feedbackMessage = "Video sedang direkam. Minum obat seperti biasa.";
     });
 
-    try {
-      await _drinkingService.ensureInitialized();
-      await _startImageStream();
-      unawaited(_recordingService.startRecording(_cameraController));
-      if (!mounted) return;
-      // Masa tenggang kehadiran wajah dihitung dari awal tahap minum.
-      _identityLock.markFaceSeen(DateTime.now());
-      _drinkingStartedAt = DateTime.now();
-      _armDrinkingTimeout();
-      setState(() {
-        _isBusy = false;
-      });
-    } catch (_) {
+    if (_recordingService.isFileReady || _recordingService.hasSessionFile) {
+      _drinkingVideoReady = _recordingService.isFileReady;
       if (!mounted) return;
       setState(() {
-        _state = VerificationState.drinking;
-        _phaseError = true;
         _isBusy = false;
-        _feedbackMessage =
-            "MediaPipe tidak dapat dijalankan. Periksa kamera lalu coba lagi.";
+        _phaseError = !_recordingService.isFileReady;
+        _feedbackMessage = _recordingService.isFileReady
+            ? "Video proses minum tersimpan."
+            : (_recordingService.errorMessage ??
+                "Video sesi ini sudah ada dan tidak direkam ulang.");
       });
+      return;
     }
+
+    if (_recordingService.isRecording) {
+      _armDrinkingTimeout();
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _drinkingVideoReady = false;
+        _feedbackMessage =
+            "Video sedang direkam. Tekan Selesai Minum jika sudah selesai.";
+      });
+      return;
+    }
+
+    final CameraController? controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      if (!mounted) return;
+      setState(() {
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = "Kamera belum siap untuk merekam video.";
+      });
+      return;
+    }
+
+    final bool started = await _recordingService.startRecording(controller);
+    if (!mounted) return;
+    _identityLock.markFaceSeen(DateTime.now());
+    if (!started) {
+      setState(() {
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = _recordingService.errorMessage ??
+            "Perekaman video tidak dapat dimulai.";
+      });
+      return;
+    }
+
+    _drinkingStartedAt = DateTime.now();
+    _drinkingVideoReady = false;
+    _armDrinkingTimeout();
+    setState(() {
+      _isBusy = false;
+      _phaseError = false;
+      _feedbackMessage =
+          "Video sedang direkam. Minum obat seperti biasa, lalu tekan Selesai Minum.";
+    });
   }
 
   void _armDrinkingTimeout() {
@@ -1123,16 +1179,66 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
-    unawaited(_completeAfterDrinking(
-      drinkingVerified: false,
-      failureReason: 'DRINKING_TIMEOUT',
-    ));
+    unawaited(_stopDrinkingRecording());
   }
 
   Future<void> _retryDrinking() async {
     await _beginDrinking(isRetry: true);
   }
 
+  Future<void> _stopDrinkingRecording() async {
+    if (_isBusy) return;
+    if (_drinkingVideoReady && _recordingService.isFileReady) return;
+
+    _cancelDrinkingTimeout();
+    setState(() {
+      _isBusy = true;
+      _phaseError = false;
+      _feedbackMessage = "Menghentikan perekaman video...";
+    });
+
+    try {
+      await _stopImageStream();
+      await _recordingService.stopRecording(_cameraController);
+      final VotVideoValidation validation =
+          await _recordingService.validateRecordedFile();
+      if (!mounted) return;
+
+      if (validation.isValid) {
+        _drinkingVideoReady = true;
+        setState(() {
+          _state = VerificationState.drinking;
+          _isBusy = false;
+          _phaseError = false;
+          _feedbackMessage = "Video proses minum tersimpan.";
+        });
+        return;
+      }
+
+      _drinkingVideoReady = false;
+      setState(() {
+        _state = VerificationState.drinking;
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = validation.errorMessage ??
+            _recordingService.errorMessage ??
+            "Video tidak valid. File tidak dihapus.";
+      });
+    } catch (error, stack) {
+      debugPrint('[AiVotPage] stop drinking recording: $error\n$stack');
+      if (!mounted) return;
+      setState(() {
+        _state = VerificationState.drinking;
+        _isBusy = false;
+        _phaseError = true;
+        _feedbackMessage = "Perekaman tidak dapat dihentikan. $error";
+      });
+    }
+  }
+
+  // FASE 2: drinking recording tidak memanggil image stream.
+  // Method tetap ada agar realtime AI tidak dihapus.
+  // ignore: unused_element
   Future<void> _startImageStream() async {
     final CameraController? controller = _cameraController;
     if (controller == null || !controller.value.isInitialized) return;
@@ -1188,7 +1294,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     );
 
     if (stage == DrinkingStage.completed) {
-      unawaited(_completeAfterDrinking());
       return;
     }
 
@@ -1217,6 +1322,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     };
   }
 
+  // FASE 2: stop recording tidak memanggil complete/upload.
+  // ignore: unused_element
   Future<void> _completeAfterDrinking({
     bool drinkingVerified = true,
     String? failureReason,
@@ -1670,6 +1777,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                                   ? _captureAndDetectMedicine
                                   : null,
                               onRetryDrinking: canAct ? _retryDrinking : null,
+                              onStopDrinking: canAct
+                                  ? () => unawaited(_stopDrinkingRecording())
+                                  : null,
+                              drinkingVideoReady: _drinkingVideoReady,
                               onRetryComplete: !_isBusy ? _retryComplete : null,
                               onFinish: () => unawaited(_leaveVot()),
                               onTestAgain: _canTestAgain && !_isBusy
