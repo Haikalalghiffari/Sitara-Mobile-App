@@ -237,6 +237,9 @@ class VideoFrameExtractor {
       return const <ExtractedVideoFrame>[];
     }
 
+    debugPrint('[VOT][DEBUG] === FRAME EXTRACTION ===');
+    debugPrint('[VOT][DEBUG] calling MethodChannel extractFrames');
+
     try {
       final List<dynamic>? rawList = await _channel.invokeListMethod<dynamic>(
         'extractFrames',
@@ -245,6 +248,8 @@ class VideoFrameExtractor {
           'sampleCount': sampleCount,
         },
       );
+
+      debugPrint('[VOT][DEBUG] frames returned=${rawList?.length ?? 0}');
 
       if (rawList == null || rawList.isEmpty) {
         debugPrint('[VideoFrameExtractor] MediaMetadataRetriever tidak menghasilkan frame.');
@@ -268,9 +273,11 @@ class VideoFrameExtractor {
       return frames;
     } on PlatformException catch (e) {
       debugPrint('[VideoFrameExtractor] PlatformException: ${e.code} - ${e.message}');
+      debugPrint('[VOT][DEBUG] frames returned=0 (PlatformException: ${e.message})');
       return const <ExtractedVideoFrame>[];
     } catch (e) {
       debugPrint('[VideoFrameExtractor] Unexpected error extracting frames: $e');
+      debugPrint('[VOT][DEBUG] frames returned=0 (Exception: $e)');
       return const <ExtractedVideoFrame>[];
     }
   }

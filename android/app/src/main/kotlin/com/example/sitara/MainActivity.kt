@@ -140,11 +140,15 @@ class MainActivity : FlutterActivity() {
                     (durationMs * 1000L) / 2
                 }
 
+                var framesExtractedCount = 0
+                var framesSavedCount = 0
+                var handDetectedTotalCount = 0
+
                 for (i in 0 until count) {
                     val timeUs = if (count == 1) intervalUs else Math.min(i * intervalUs, durationMs * 1000L)
                     val timestampMs = timeUs / 1000L
 
-                    val bitmap: Bitmap? = try {
+                    val sourceBitmap: Bitmap? = try {
                         retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                             ?: retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                     } catch (e: Exception) {
@@ -152,7 +156,29 @@ class MainActivity : FlutterActivity() {
                         null
                     }
 
-                    if (bitmap != null) {
+                    if (sourceBitmap != null) {
+                        framesExtractedCount++
+                        val sourceConfig = sourceBitmap.config
+                        val width = sourceBitmap.width
+                        val height = sourceBitmap.height
+
+                        // FIX 1 — FORCE ARGB_8888: Buat copy terpisah untuk MediaPipe HandLandmarker
+                        var analysisBitmap: Bitmap? = null
+                        try {
+                            analysisBitmap = sourceBitmap.copy(Bitmap.Config.ARGB_8888, true)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[VOT][FRAME] Failed copying to ARGB_8888: ${e.message}")
+                        }
+
+                        val analysisConfig = analysisBitmap?.config
+
+                        Log.d(TAG, "[VOT][FRAME] index=$i")
+                        Log.d(TAG, "[VOT][FRAME] timestamp=$timestampMs")
+                        Log.d(TAG, "[VOT][FRAME] sourceConfig=$sourceConfig")
+                        Log.d(TAG, "[VOT][FRAME] analysisConfig=$analysisConfig")
+                        Log.d(TAG, "[VOT][FRAME] width=$width")
+                        Log.d(TAG, "[VOT][FRAME] height=$height")
+
                         var handDetected = false
                         var thumbTipX: Double? = null
                         var thumbTipY: Double? = null
@@ -161,75 +187,114 @@ class MainActivity : FlutterActivity() {
                         var middleTipX: Double? = null
                         var middleTipY: Double? = null
 
-                        // 1. Detect Hand Landmarks natively on Bitmap
-                        var mpImage: MPImage? = null
-                        try {
-                            mpImage = BitmapImageBuilder(bitmap).build()
-                            val detectionResult: HandLandmarkerResult = landmarker.detect(mpImage)
-                            val landmarksList = detectionResult.landmarks()
-                            if (!landmarksList.isNullOrEmpty()) {
-                                val firstHand = landmarksList[0]
-                                if (firstHand.size > 12) {
-                                    handDetected = true
-                                    val thumb = firstHand[4]
-                                    val index = firstHand[8]
-                                    val middle = firstHand[12]
+                        // FIX 2 & 4 — SEPARATE OWNERSHIP & ERROR ISOLATION:
+                        // Deteksi hand landmark pada analysisBitmap; kegagalan tidak membatalkan frame JPEG
+                        if (analysisBitmap != null && analysisConfig == Bitmap.Config.ARGB_8888) {
+                            var mpImage: MPImage? = null
+                            try {
+                                mpImage = BitmapImageBuilder(analysisBitmap).build()
+                                val detectionResult: HandLandmarkerResult = landmarker.detect(mpImage)
+                                val landmarksList = detectionResult.landmarks()
+                                if (!landmarksList.isNullOrEmpty()) {
+                                    val firstHand = landmarksList[0]
+                                    if (firstHand.size > 12) {
+                                        handDetected = true
+                                        val thumb = firstHand[4]
+                                        val index = firstHand[8]
+                                        val middle = firstHand[12]
 
-                                    thumbTipX = thumb.x().toDouble()
-                                    thumbTipY = thumb.y().toDouble()
-                                    indexTipX = index.x().toDouble()
-                                    indexTipY = index.y().toDouble()
-                                    middleTipX = middle.x().toDouble()
-                                    middleTipY = middle.y().toDouble()
+                                        thumbTipX = thumb.x().toDouble()
+                                        thumbTipY = thumb.y().toDouble()
+                                        indexTipX = index.x().toDouble()
+                                        indexTipY = index.y().toDouble()
+                                        middleTipX = middle.x().toDouble()
+                                        middleTipY = middle.y().toDouble()
 
-                                    Log.d(
-                                        TAG,
-                                        "[VOT][HAND][FRAME] timestamp=$timestampMs detected=true thumb=(${String.format("%.2f", thumbTipX)}, ${String.format("%.2f", thumbTipY)}) index=(${String.format("%.2f", indexTipX)}, ${String.format("%.2f", indexTipY)}) middle=(${String.format("%.2f", middleTipX)}, ${String.format("%.2f", middleTipY)})"
-                                    )
+                                        Log.d(
+                                            TAG,
+                                            "[VOT][HAND][FRAME] timestamp=$timestampMs detected=true thumb=(${String.format("%.2f", thumbTipX)}, ${String.format("%.2f", thumbTipY)}) index=(${String.format("%.2f", indexTipX)}, ${String.format("%.2f", indexTipY)}) middle=(${String.format("%.2f", middleTipX)}, ${String.format("%.2f", middleTipY)})"
+                                        )
+                                    }
                                 }
-                            } else {
-                                Log.d(TAG, "[VOT][HAND][FRAME] timestamp=$timestampMs detected=false")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "[VOT][HAND][ERROR] timestamp=$timestampMs error=${e.message}")
+                            } finally {
+                                try {
+                                    mpImage?.close()
+                                } catch (_: Exception) {}
                             }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "[VOT][HAND] timestamp=$timestampMs error=${e.message}")
-                        } finally {
-                            try {
-                                mpImage?.close()
-                            } catch (_: Exception) {}
+                        } else {
+                            Log.w(TAG, "[VOT][HAND][ERROR] timestamp=$timestampMs analysisBitmap is null or not ARGB_8888")
                         }
 
-                        // 2. Save frame JPEG to cache
-                        val frameFile = File(framesDir, "frame_${System.currentTimeMillis()}_${i}_${timestampMs}ms.jpg")
-                        var fos: FileOutputStream? = null
+                        if (handDetected) {
+                            handDetectedTotalCount++
+                        }
+                        Log.d(TAG, "[VOT][HAND] detected=$handDetected")
+
+                        // FIX 2 & 3 — SEPARATE BITMAP OWNERSHIP & SAFE COMPRESSION:
+                        // sourceBitmap adalah instance terpisah yang tidak terpengaruh mpImage.close()
+                        val saveBitmapRecycledBeforeCompress = sourceBitmap.isRecycled
+                        Log.d(TAG, "[VOT][FRAME] saveBitmapRecycledBeforeCompress=$saveBitmapRecycledBeforeCompress")
+
+                        var jpegSaved = false
+                        if (!saveBitmapRecycledBeforeCompress) {
+                            val frameFile = File(framesDir, "frame_${System.currentTimeMillis()}_${i}_${timestampMs}ms.jpg")
+                            var fos: FileOutputStream? = null
+                            try {
+                                fos = FileOutputStream(frameFile)
+                                sourceBitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
+                                fos.flush()
+                                jpegSaved = true
+                                framesSavedCount++
+
+                                val frameMap = HashMap<String, Any?>()
+                                frameMap["path"] = frameFile.absolutePath
+                                frameMap["timestampMs"] = timestampMs
+                                frameMap["width"] = width
+                                frameMap["height"] = height
+                                frameMap["handDetected"] = handDetected
+                                frameMap["thumbTipX"] = thumbTipX
+                                frameMap["thumbTipY"] = thumbTipY
+                                frameMap["indexTipX"] = indexTipX
+                                frameMap["indexTipY"] = indexTipY
+                                frameMap["middleTipX"] = middleTipX
+                                frameMap["middleTipY"] = middleTipY
+
+                                frameList.add(frameMap)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed writing frame $i: ${e.message}")
+                            } finally {
+                                try {
+                                    fos?.close()
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        Log.d(TAG, "[VOT][FRAME] jpegSaved=$jpegSaved")
+
+                        // FIX 3 — RESOURCE CLEANUP: Cleanup masing-masing Bitmap secara aman
                         try {
-                            fos = FileOutputStream(frameFile)
-                            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, fos)
-                            fos.flush()
+                            if (analysisBitmap != null && !analysisBitmap.isRecycled) {
+                                analysisBitmap.recycle()
+                            }
+                        } catch (_: Exception) {}
 
-                            val frameMap = HashMap<String, Any?>()
-                            frameMap["path"] = frameFile.absolutePath
-                            frameMap["timestampMs"] = timestampMs
-                            frameMap["width"] = bitmap.width
-                            frameMap["height"] = bitmap.height
-                            frameMap["handDetected"] = handDetected
-                            frameMap["thumbTipX"] = thumbTipX
-                            frameMap["thumbTipY"] = thumbTipY
-                            frameMap["indexTipX"] = indexTipX
-                            frameMap["indexTipY"] = indexTipY
-                            frameMap["middleTipX"] = middleTipX
-                            frameMap["middleTipY"] = middleTipY
-
-                            frameList.add(frameMap)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed writing frame $i: ${e.message}")
-                        } finally {
-                            try {
-                                fos?.close()
-                            } catch (_: Exception) {}
-                            bitmap.recycle()
-                        }
+                        try {
+                            if (!sourceBitmap.isRecycled) {
+                                sourceBitmap.recycle()
+                            }
+                        } catch (_: Exception) {}
                     }
                 }
+
+                Log.d(TAG, """
+[VOT][FRAME EXTRACTION RESULT]
+requested=$count
+extracted=$framesExtractedCount
+saved=$framesSavedCount
+handDetected=$handDetectedTotalCount
+""".trimIndent())
 
                 if (frameList.isEmpty()) {
                     runOnUiThread {

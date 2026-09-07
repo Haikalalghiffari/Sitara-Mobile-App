@@ -17,6 +17,7 @@ import '../../login/services/auth_service.dart';
 
 import '../models/camera_status.dart';
 import '../models/daily_medication.dart';
+import '../models/drinking_analysis_result.dart';
 import '../models/face_status.dart';
 import '../models/verification_state.dart';
 import '../models/vot_face_verify_result.dart';
@@ -25,6 +26,7 @@ import '../models/vot_start_response.dart';
 import '../pages/register_face_page.dart';
 import '../services/face_service.dart';
 import '../services/local_drinking_service.dart';
+import '../services/video_drinking_analysis_service.dart';
 import '../services/vot_recording_service.dart';
 import '../services/vot_service.dart';
 import '../utils/drinking_sequence.dart';
@@ -38,6 +40,7 @@ import '../widgets/verification_action_button.dart';
 import '../widgets/verification_camera_view.dart';
 import '../widgets/verification_indicator_panel.dart';
 import '../widgets/verification_info.dart';
+import '../widgets/vot_diagnostic_card.dart';
 import '../widgets/vot_schedule_info.dart';
 
 class AiVotPage extends StatefulWidget {
@@ -85,6 +88,10 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   final DrinkingSequenceMachine _drinkingMachine = DrinkingSequenceMachine();
   final VotCompletionGuard _completionGuard = VotCompletionGuard();
   final VotScreenAwake _screenAwake = VotScreenAwake();
+  final VideoDrinkingAnalysisService _videoAnalysisService =
+      VideoDrinkingAnalysisService();
+  DrinkingAnalysisResult? _lastAnalysisResult;
+  bool _showDiagnosticCard = true;
   Timer? _drinkingTimeout;
   DateTime? _drinkingStartedAt;
   Future<void>? _lifecycleGate;
@@ -1037,6 +1044,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _phaseError = false;
       _detectionBox = null;
       _detectionLabel = null;
+      _lastAnalysisResult = null;
       _feedbackMessage = "Menyiapkan perekaman...";
     });
 
@@ -1054,6 +1062,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
       _drinkingStartedAt = DateTime.now();
+      _armDrinkingTimeout();
       setState(() {
         _isBusy = false;
         _feedbackMessage = "Sedang merekam... Silakan minum obat Anda.";
@@ -1139,10 +1148,12 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     final bool fileExists = videoFile.existsSync();
     final int fileSize = fileExists ? videoFile.lengthSync() : 0;
 
-    debugPrint(
-      '[VOT] Video recorded: path=${recordedFile.path}, '
-      'exists=$fileExists, size=$fileSize bytes',
-    );
+    debugPrint('''
+[VOT][DEBUG] === RECORDING FINISHED ===
+[VOT][DEBUG] recordedFile.path=${recordedFile.path}
+[VOT][DEBUG] exists=$fileExists
+[VOT][DEBUG] size=$fileSize
+''');
 
     if (!fileExists || fileSize <= 0) {
       _completionGuard.markFailure();
@@ -1154,6 +1165,41 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
             "Silakan coba lagi.";
       });
       return;
+    }
+
+    // 2.1 DEVICE TEST MODE: Jalankan AI Drinking Video Analysis dari video nyata
+    setState(() {
+      _feedbackMessage = "Menganalisis video proses minum (AI Analysis)...";
+    });
+
+    debugPrint('''
+[VOT][DEBUG] === AI ANALYSIS START ===
+[VOT][DEBUG] analyzeVideo.path=${recordedFile.path}
+''');
+
+    try {
+      final DrinkingAnalysisResult analysisResult =
+          await _videoAnalysisService.analyzeVideo(
+        videoPath: recordedFile.path,
+        sampleCount: 18,
+      );
+
+      debugPrint('''
+[VOT][DEBUG] === AI RESULT ===
+[VOT][DEBUG] framesExtracted=${analysisResult.framesExtracted}
+[VOT][DEBUG] handDetectedFrames=${analysisResult.handDetectedFrames}
+[VOT][DEBUG] mouthDetectedFrames=${analysisResult.mouthDetectedFrames}
+[VOT][DEBUG] confidence=${analysisResult.confidenceScore.toStringAsFixed(1)}%
+''');
+
+      if (mounted) {
+        setState(() {
+          _lastAnalysisResult = analysisResult;
+          _showDiagnosticCard = true;
+        });
+      }
+    } catch (e, stack) {
+      debugPrint('[VOT][DEBUG] Error analyzeVideo: $e\n$stack');
     }
 
     // 3. Upload video
@@ -1193,15 +1239,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _startImageStream() async {
-    final CameraController? controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) return;
-    if (_streaming) return;
-
-    await controller.startImageStream(_onCameraImage);
-    _streaming = true;
-  }
-
   Future<void> _stopImageStream() async {
     final CameraController? controller = _cameraController;
     if (controller != null && _streaming) {
@@ -1210,46 +1247,6 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       } catch (_) {}
     }
     _streaming = false;
-  }
-
-  void _onCameraImage(CameraImage image) {
-    if (_state != VerificationState.drinking) return;
-    final CameraController? controller = _cameraController;
-    if (controller == null) return;
-
-    final DrinkingObservation? observation = _drinkingService.observeFrame(
-      image: image,
-      sensorOrientation: controller.description.sensorOrientation,
-      frontCamera:
-          controller.description.lensDirection == CameraLensDirection.front,
-      now: DateTime.now(),
-    );
-    if (observation == null) return;
-
-    final DrinkingStage stage = _drinkingMachine.update(
-      handVisible: observation.handVisible,
-      faceVisible: observation.faceVisible,
-      handMouthDistance: observation.handMouthDistance,
-      now: DateTime.now(),
-    );
-
-    if (stage == DrinkingStage.completed) {
-      unawaited(_completeAfterDrinking());
-      return;
-    }
-
-    if (!mounted) return;
-    final String hint = switch (stage) {
-      DrinkingStage.waiting => "Tunjukkan tangan yang memegang obat.",
-      DrinkingStage.handWithMedicine => "Dekatkan obat ke mulut.",
-      DrinkingStage.approachingMouth => "Mendekati mulut...",
-      DrinkingStage.nearMouth => "Minum, lalu jauhkan tangan dari mulut.",
-      DrinkingStage.withdrawing => "Jauhkan tangan dari mulut.",
-      DrinkingStage.completed => "Memverifikasi proses minum...",
-    };
-    if (_feedbackMessage != hint) {
-      setState(() => _feedbackMessage = hint);
-    }
   }
 
   Future<void> _completeAfterDrinking({
@@ -1639,6 +1636,30 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
                           children: [
                             const SizedBox(height: AppSpacing.lg),
                             VerificationIndicatorPanel(state: _state),
+                            if (_lastAnalysisResult != null && _showDiagnosticCard) ...[
+                              Builder(
+                                builder: (context) {
+                                  debugPrint('''
+[VOT][DEBUG] === DIAGNOSTIC UI ===
+[VOT][DEBUG] result object is null = ${_lastAnalysisResult == null}
+[VOT][DEBUG] frameAnalyses length = ${_lastAnalysisResult?.frameAnalyses.length ?? 0}
+''');
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              VotDiagnosticCard(
+                                result: _lastAnalysisResult!,
+                                onClose: () => setState(() => _showDiagnosticCard = false),
+                              ),
+                            ] else if (_lastAnalysisResult != null) ...[
+                              const SizedBox(height: AppSpacing.sm),
+                              OutlinedButton.icon(
+                                onPressed: () => setState(() => _showDiagnosticCard = true),
+                                icon: const Icon(Icons.analytics_outlined, size: 16),
+                                label: const Text("Tampilkan Diagnostic AI"),
+                              ),
+                            ],
                             if (_feedbackMessage != null) ...[
                               const SizedBox(height: AppSpacing.md),
                               Text(

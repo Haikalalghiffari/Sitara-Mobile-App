@@ -57,6 +57,26 @@ class FrameAnalysis {
 
 /// Model hasil akhir analisis video proses minum obat (Post-Recording Video Analysis).
 class DrinkingAnalysisResult {
+
+  final int videoDurationMs;
+  final int framesExtracted;
+  final int faceDetectedFrames;
+  final int handDetectedFrames;
+  final int validDistanceFrames;
+  final double? minDistance;
+  final double? maxDistance;
+  final bool farDetected;
+  final int nearMouthFrames;
+  final bool nearMouthDetected;
+  final bool approachDetected;
+  final bool withdrawDetected;
+  final bool sequenceCompleted;
+  final double confidenceScore;
+  final DrinkingConfidenceLevel level;
+  final bool isAutoVerified;
+  final String reason;
+  final List<FrameAnalysis> frameAnalyses;
+
   const DrinkingAnalysisResult({
     required this.videoDurationMs,
     required this.framesExtracted,
@@ -65,6 +85,8 @@ class DrinkingAnalysisResult {
     required this.validDistanceFrames,
     required this.minDistance,
     required this.maxDistance,
+    this.farDetected = false,
+    this.nearMouthFrames = 0,
     required this.nearMouthDetected,
     required this.approachDetected,
     required this.withdrawDetected,
@@ -76,22 +98,10 @@ class DrinkingAnalysisResult {
     this.frameAnalyses = const <FrameAnalysis>[],
   });
 
-  final int videoDurationMs;
-  final int framesExtracted;
-  final int faceDetectedFrames;
-  final int handDetectedFrames;
-  final int validDistanceFrames;
-  final double? minDistance;
-  final double? maxDistance;
-  final bool nearMouthDetected;
-  final bool approachDetected;
-  final bool withdrawDetected;
-  final bool sequenceCompleted;
-  final double confidenceScore;
-  final DrinkingConfidenceLevel level;
-  final bool isAutoVerified;
-  final String reason;
-  final List<FrameAnalysis> frameAnalyses;
+  /// Alias properties to match diagnostic naming requirements
+  int get mouthDetectedFrames => faceDetectedFrames;
+  double? get minimumDistance => minDistance;
+  double? get maximumDistance => maxDistance;
 
   /// String status untuk backend dan UI.
   String get statusLabel => switch (level) {
@@ -99,6 +109,42 @@ class DrinkingAnalysisResult {
         DrinkingConfidenceLevel.medium => 'NEEDS REVIEW',
         DrinkingConfidenceLevel.low => 'MANUAL REVIEW REQUIRED',
       };
+
+  /// Mencetak hasil nyata device test sesuai spesifikasi [VOT][DEVICE TEST RESULT].
+  void printDeviceTestResult() {
+    final String minDistStr =
+        minDistance != null ? minDistance!.toStringAsFixed(3) : '-';
+    final String maxDistStr =
+        maxDistance != null ? maxDistance!.toStringAsFixed(3) : '-';
+    final String farStr = farDetected ? 'YES' : 'NO';
+    final String appStr = approachDetected ? 'YES' : 'NO';
+    final String nearStr = nearMouthDetected ? 'YES' : 'NO';
+    final String withStr = withdrawDetected ? 'YES' : 'NO';
+    final String scoreStr = '${confidenceScore.toStringAsFixed(1)}%';
+
+    final String output = '''
+[VOT][DEVICE TEST RESULT]
+framesExtracted: $framesExtracted
+handDetectedFrames: $handDetectedFrames
+mouthDetectedFrames: $faceDetectedFrames
+nearMouthFrames: $nearMouthFrames
+
+minimumDistance: $minDistStr
+maximumDistance: $maxDistStr
+
+FAR: $farStr
+APPROACH: $appStr
+NEAR: $nearStr
+WITHDRAW: $withStr
+
+sequenceCompleted: $sequenceCompleted
+
+confidenceScore: $scoreStr
+level: $statusLabel
+isAutoVerified: $isAutoVerified
+''';
+    debugPrint(output);
+  }
 
   /// Mencetak ringkasan diagnostic ke console sesuai format wajib.
   void printDiagnosticSummary() {

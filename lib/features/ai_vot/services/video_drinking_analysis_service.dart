@@ -273,6 +273,11 @@ class VideoDrinkingAnalysisService {
       reason = 'Visual drinking sequence could not be confidently detected (${totalConfidence.toStringAsFixed(1)}%).';
     }
 
+    final int nearMouthFramesCount = frameAnalyses
+        .where((FrameAnalysis f) =>
+            f.handMouthDistance != null && f.handMouthDistance! <= nearThreshold)
+        .length;
+
     final DrinkingAnalysisResult result = DrinkingAnalysisResult(
       videoDurationMs: videoDurationMs,
       framesExtracted: totalFrames,
@@ -281,6 +286,8 @@ class VideoDrinkingAnalysisService {
       validDistanceFrames: validDistanceCount,
       minDistance: minOverallDistance,
       maxDistance: maxOverallDistance,
+      farDetected: temporal.firstFarDetected,
+      nearMouthFrames: nearMouthFramesCount,
       nearMouthDetected: temporal.nearMouthDetected,
       approachDetected: temporal.approachDetected,
       withdrawDetected: temporal.withdrawDetected,
@@ -292,28 +299,8 @@ class VideoDrinkingAnalysisService {
       frameAnalyses: frameAnalyses,
     );
 
-    // Cetak log terstruktur sesuai spesifikasi STEP 7
-    final int nearMouthFramesCount = frameAnalyses
-        .where((FrameAnalysis f) => f.handMouthDistance != null && f.handMouthDistance! <= nearThreshold)
-        .length;
-
-    debugPrint('''
-[VOT][AI ANALYSIS RESULT]
-framesExtracted=$totalFrames
-handDetectedFrames=$handDetectedCount
-mouthDetectedFrames=$faceDetectedCount
-nearMouthFrames=$nearMouthFramesCount
-
-sequence:
-FAR=${temporal.firstFarDetected ? 'YES' : 'NO'}
-APPROACH=${temporal.approachDetected ? 'YES' : 'NO'}
-NEAR=${temporal.nearMouthDetected ? 'YES' : 'NO'}
-WITHDRAW=${temporal.withdrawDetected ? 'YES' : 'NO'}
-
-confidence=${totalConfidence.toStringAsFixed(1)}%
-level=${result.statusLabel}
-autoVerified=$isAutoVerified
-''');
+    // Cetak log terstruktur sesuai Device Test Mode
+    result.printDeviceTestResult();
 
     // Cetak ringkasan banner
     result.printDiagnosticSummary();
