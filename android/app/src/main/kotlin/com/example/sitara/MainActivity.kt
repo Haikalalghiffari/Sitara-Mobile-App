@@ -149,8 +149,7 @@ class MainActivity : FlutterActivity() {
                     val timestampMs = timeUs / 1000L
 
                     val sourceBitmap: Bitmap? = try {
-                        retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                            ?: retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                        retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed retrieving frame at $timestampMs ms: ${e.message}")
                         null
@@ -173,6 +172,7 @@ class MainActivity : FlutterActivity() {
                         val analysisConfig = analysisBitmap?.config
 
                         Log.d(TAG, "[VOT][FRAME] index=$i")
+                        Log.d(TAG, "[VOT][FRAME] requestedTimestampMs=$timestampMs")
                         Log.d(TAG, "[VOT][FRAME] timestamp=$timestampMs")
                         Log.d(TAG, "[VOT][FRAME] sourceConfig=$sourceConfig")
                         Log.d(TAG, "[VOT][FRAME] analysisConfig=$analysisConfig")

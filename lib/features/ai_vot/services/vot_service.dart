@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_config.dart';
@@ -189,12 +190,16 @@ class VotService {
     bool drinkingVerified = true,
     String? maxDrinkingStage,
     String? failureReason,
+    double? aiConfidence,
+    Map<String, dynamic>? aiDetails,
   }) async {
     final Map<String, Object>? body = VotFlow.completeRequestBody(
       dailyMedicationId,
       drinkingVerified: drinkingVerified,
       maxDrinkingStage: maxDrinkingStage,
       failureReason: failureReason,
+      aiConfidence: aiConfidence,
+      aiDetails: aiDetails,
     );
     if (body == null) {
       throw const ApiException(
@@ -202,11 +207,15 @@ class VotService {
       );
     }
 
+    debugPrint('[VOT][API] POST /vot/complete request payload: $body');
+
     try {
       final Response<dynamic> response = await _apiClient.dio.post<dynamic>(
         ApiEndpoints.votComplete,
         data: body,
       );
+
+      debugPrint('[VOT][API] POST /vot/complete response data: ${response.data}');
 
       return _parseComplete(response.data);
     } on ApiException {

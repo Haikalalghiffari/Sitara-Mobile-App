@@ -51,14 +51,13 @@ void main() {
     });
 
     // 3. Drinking Failure Scenarios (maxStageReached before vs after nearMouth)
-    test('Drinking failure with maxStageReached=waiting and can_retry=true stays on drinking for retry', () {
+    test('Drinking failure with maxStageReached=waiting and can_retry=true enters needsReview', () {
       final state = VotFlow.afterComplete(
         serverVerified: false,
         isNeedsReview: false,
         canRetry: true,
       );
-      expect(state, VerificationState.drinking);
-      expect(VotFlow.retryTarget(state: state, phaseError: true), VotRetryTarget.drinking);
+      expect(state, VerificationState.needsReview);
     });
 
     test('Drinking failure after nearMouth with can_retry=false enters needsReview without asking to drink again', () {

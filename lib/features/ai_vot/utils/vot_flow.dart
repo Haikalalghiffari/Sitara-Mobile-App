@@ -61,6 +61,8 @@ class VotFlow {
     bool drinkingVerified = true,
     String? maxDrinkingStage,
     String? failureReason,
+    double? aiConfidence,
+    Map<String, dynamic>? aiDetails,
   }) {
     if (dailyMedicationId == null || dailyMedicationId <= 0) return null;
     final Map<String, Object> body = <String, Object>{
@@ -72,6 +74,12 @@ class VotFlow {
     }
     if (failureReason != null && failureReason.isNotEmpty) {
       body['failure_reason'] = failureReason;
+    }
+    if (aiConfidence != null) {
+      body['ai_confidence'] = aiConfidence;
+    }
+    if (aiDetails != null && aiDetails.isNotEmpty) {
+      body['ai_details'] = aiDetails;
     }
     return body;
   }

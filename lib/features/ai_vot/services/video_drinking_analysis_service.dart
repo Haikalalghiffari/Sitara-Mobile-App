@@ -210,6 +210,22 @@ class VideoDrinkingAnalysisService {
         }
       }
 
+      final String classifiedStage = dist == null
+          ? 'NO_DETECTION'
+          : (dist >= farThreshold
+              ? 'FAR'
+              : (dist <= nearThreshold ? 'NEAR' : 'APPROACH/TRANSITION'));
+
+      debugPrint('''
+[VOT][AI][FRAME]
+index=$i
+timestampMs=${frame.timestampMs}
+handDetected=${frame.handDetected}
+mouthDetected=$faceInFrame
+distance=${dist != null ? dist.toStringAsFixed(3) : 'null'}
+classifiedStage=$classifiedStage
+''');
+
       frameAnalyses.add(
         FrameAnalysis(
           index: i,
@@ -379,6 +395,27 @@ class VideoDrinkingAnalysisService {
         withdrawDetected &&
         (approachIndex == null || nearIndex > approachIndex) &&
         (withdrawIndex > nearIndex);
+
+    // Logging transisi sekuens
+    String previousStage = 'INIT';
+    for (final MapEntry<int, double> entry in validDistances) {
+      final double d = entry.value;
+      final String currentStage = d >= farThreshold
+          ? 'FAR'
+          : (d <= nearThreshold ? 'NEAR' : 'APPROACH/TRANSITION');
+      if (currentStage != previousStage) {
+        debugPrint('''
+[VOT][AI][SEQUENCE]
+previousStage=$previousStage
+currentStage=$currentStage
+farDetected=$firstFar
+approachDetected=$approachDetected
+nearDetected=$nearDetected
+withdrawDetected=$withdrawDetected
+''');
+        previousStage = currentStage;
+      }
+    }
 
     return _TemporalAnalysis(
       firstFarDetected: firstFar,

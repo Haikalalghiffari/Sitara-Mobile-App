@@ -1167,7 +1167,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       return;
     }
 
-    // 2.1 DEVICE TEST MODE: Jalankan AI Drinking Video Analysis dari video nyata
+    // 2.1 Jalankan AI Drinking Video Analysis dari video nyata
     setState(() {
       _feedbackMessage = "Menganalisis video proses minum (AI Analysis)...";
     });
@@ -1177,9 +1177,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 [VOT][DEBUG] analyzeVideo.path=${recordedFile.path}
 ''');
 
+    DrinkingAnalysisResult? analysisResult;
     try {
-      final DrinkingAnalysisResult analysisResult =
-          await _videoAnalysisService.analyzeVideo(
+      analysisResult = await _videoAnalysisService.analyzeVideo(
         videoPath: recordedFile.path,
         sampleCount: 18,
       );
@@ -1191,19 +1191,18 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 [VOT][DEBUG] mouthDetectedFrames=${analysisResult.mouthDetectedFrames}
 [VOT][DEBUG] confidence=${analysisResult.confidenceScore.toStringAsFixed(1)}%
 ''');
-
-      if (mounted) {
-        setState(() {
-          _lastAnalysisResult = analysisResult;
-          _showDiagnosticCard = true;
-        });
-      }
     } catch (e, stack) {
       debugPrint('[VOT][DEBUG] Error analyzeVideo: $e\n$stack');
     }
 
-    // 3. Upload video
+    // 1. Simpan analysisResult ke _lastAnalysisResult sebelum upload & POST /vot/complete
     if (!mounted) return;
+    setState(() {
+      _lastAnalysisResult = analysisResult;
+      _showDiagnosticCard = true;
+    });
+
+    // 3. Upload video
     setState(() {
       _feedbackMessage = "Mengunggah video...";
     });
@@ -1222,21 +1221,80 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
     if (!mounted) return;
 
-    // 4. Complete session
-    // AI video analysis belum diimplementasikan pada tahap ini.
-    // Kirim drinking_verified: false dengan alasan AI_ANALYSIS_PENDING.
-    // Video sudah terupload untuk manual review oleh Nakes.
+    // 4. Decision and Complete session
+    // drinkingVerified langsung dari isAutoVerified (tanpa hardcode)
+    final bool isAutoVerified = analysisResult?.isAutoVerified ?? false;
+    final bool drinkingVerified = isAutoVerified;
+    final String? failureReason = isAutoVerified
+        ? null
+        : (analysisResult != null ? 'AI_LOW_CONFIDENCE' : 'AI_ANALYSIS_FAILED');
+
+    // Normalisasi confidence secara aman: Flutter adalah satu-satunya layer yang menormalisasi
+    final double? normalizedConfidence = analysisResult != null
+        ? normalizeConfidence(analysisResult.confidenceScore)
+            .clamp(0.0, 1.0)
+            .toDouble()
+        : null;
+
+    final Map<String, dynamic>? aiDetails = analysisResult != null
+        ? <String, dynamic>{
+            'level': analysisResult.level.name,
+            'near_mouth_detected': analysisResult.nearMouthDetected,
+            'sequence_completed': analysisResult.sequenceCompleted,
+            'confidence_score': analysisResult.confidenceScore,
+          }
+        : null;
+
+    // Diagnostic Log sebelum POST /vot/complete
+    final String confidenceScoreStr = analysisResult != null
+        ? analysisResult.confidenceScore.toStringAsFixed(1)
+        : 'null';
+    final String normalizedAiConfidenceStr = normalizedConfidence != null
+        ? normalizedConfidence.toStringAsFixed(4)
+        : 'null';
+    final String levelStr = analysisResult != null
+        ? analysisResult.level.name
+        : 'low';
+    final String nearMouthDetectedStr = (analysisResult?.nearMouthDetected ?? false).toString();
+    final String sequenceCompletedStr = (analysisResult?.sequenceCompleted ?? false).toString();
+    final String isAutoVerifiedStr = isAutoVerified.toString();
+    final String drinkingVerifiedSentStr = drinkingVerified.toString();
+    final String failureReasonSentStr = failureReason ?? 'null';
+
+    debugPrint('''
+[VOT][AI][FINAL DECISION]
+confidenceScore=$confidenceScoreStr
+normalizedAiConfidence=$normalizedAiConfidenceStr
+level=$levelStr
+nearMouthDetected=$nearMouthDetectedStr
+sequenceCompleted=$sequenceCompletedStr
+isAutoVerified=$isAutoVerifiedStr
+drinkingVerifiedSent=$drinkingVerifiedSentStr
+failureReasonSent=$failureReasonSentStr
+''');
+
     setState(() {
       _state = VotFlow.afterLocalDrinkingCompleted();
-      _feedbackMessage =
-          "Video berhasil direkam. Mengirim untuk pemeriksaan...";
+      _feedbackMessage = drinkingVerified
+          ? "Video terverifikasi otomatis. Menyimpan hasil..."
+          : "Video berhasil direkam. Mengirim untuk pemeriksaan...";
     });
 
     await _submitCompleteRequest(
-      drinkingVerified: false,
+      drinkingVerified: drinkingVerified,
       maxDrinkingStage: 'post_recording',
-      failureReason: 'AI_ANALYSIS_PENDING',
+      failureReason: failureReason,
+      aiConfidence: normalizedConfidence,
+      aiDetails: aiDetails,
     );
+  }
+
+  /// Normalisasi skor keyakinan AI (0.0 - 1.0) secara aman.
+  static double normalizeConfidence(double confidenceScore) {
+    if (confidenceScore > 1.0) {
+      return confidenceScore / 100.0;
+    }
+    return confidenceScore;
   }
 
   Future<void> _stopImageStream() async {
@@ -1321,10 +1379,34 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _feedbackMessage = "Mengirim ulang untuk pemeriksaan...";
     });
 
+    final DrinkingAnalysisResult? lastResult = _lastAnalysisResult;
+    final bool isAutoVerified = lastResult?.isAutoVerified ?? false;
+    final bool drinkingVerified = isAutoVerified;
+    final String? failureReason = isAutoVerified
+        ? null
+        : (lastResult != null ? 'AI_LOW_CONFIDENCE' : 'AI_ANALYSIS_FAILED');
+
+    final double? normalizedConfidence = lastResult != null
+        ? normalizeConfidence(lastResult.confidenceScore)
+            .clamp(0.0, 1.0)
+            .toDouble()
+        : null;
+
+    final Map<String, dynamic>? aiDetails = lastResult != null
+        ? <String, dynamic>{
+            'level': lastResult.level.name,
+            'near_mouth_detected': lastResult.nearMouthDetected,
+            'sequence_completed': lastResult.sequenceCompleted,
+            'confidence_score': lastResult.confidenceScore,
+          }
+        : null;
+
     await _submitCompleteRequest(
-      drinkingVerified: false,
+      drinkingVerified: drinkingVerified,
       maxDrinkingStage: 'post_recording',
-      failureReason: 'AI_ANALYSIS_PENDING',
+      failureReason: failureReason,
+      aiConfidence: normalizedConfidence,
+      aiDetails: aiDetails,
     );
   }
 
@@ -1332,6 +1414,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     bool drinkingVerified = true,
     String? maxDrinkingStage,
     String? failureReason,
+    double? aiConfidence,
+    Map<String, dynamic>? aiDetails,
   }) async {
     final int? dailyId = _dailyMedicationId;
     if (dailyId == null || dailyId <= 0) {
@@ -1353,6 +1437,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         drinkingVerified: drinkingVerified,
         maxDrinkingStage: maxDrinkingStage ?? _drinkingMachine.maxStageReached.name,
         failureReason: failureReason,
+        aiConfidence: aiConfidence,
+        aiDetails: aiDetails,
       );
       if (!mounted) return;
 

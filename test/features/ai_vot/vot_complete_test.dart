@@ -42,6 +42,112 @@ void main() {
     });
   });
 
+  test('complete body for post_recording auto-verified omits failure_reason', () {
+    const int startedId = 10;
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      startedId,
+      drinkingVerified: true,
+      maxDrinkingStage: 'post_recording',
+    );
+
+    expect(body, <String, Object>{
+      'daily_medication_id': startedId,
+      'drinking_verified': true,
+      'max_drinking_stage': 'post_recording',
+    });
+    expect(body!.containsKey('failure_reason'), isFalse);
+  });
+
+  test('complete body for post_recording AI_LOW_CONFIDENCE sends failure_reason', () {
+    const int startedId = 10;
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      startedId,
+      drinkingVerified: false,
+      maxDrinkingStage: 'post_recording',
+      failureReason: 'AI_LOW_CONFIDENCE',
+    );
+
+    expect(body, <String, Object>{
+      'daily_medication_id': startedId,
+      'drinking_verified': false,
+      'max_drinking_stage': 'post_recording',
+      'failure_reason': 'AI_LOW_CONFIDENCE',
+    });
+  });
+
+  test('complete body for post_recording AI_ANALYSIS_FAILED sends failure_reason', () {
+    const int startedId = 10;
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      startedId,
+      drinkingVerified: false,
+      maxDrinkingStage: 'post_recording',
+      failureReason: 'AI_ANALYSIS_FAILED',
+    );
+
+    expect(body, <String, Object>{
+      'daily_medication_id': startedId,
+      'drinking_verified': false,
+      'max_drinking_stage': 'post_recording',
+      'failure_reason': 'AI_ANALYSIS_FAILED',
+    });
+  });
+
+  test('complete body with ai_confidence and ai_details populates correctly', () {
+    const int startedId = 12;
+    final Map<String, dynamic> details = <String, dynamic>{
+      'level': 'high',
+      'near_mouth_detected': true,
+      'sequence_completed': true,
+      'confidence_score': 95.0,
+    };
+    final Map<String, Object>? body = VotFlow.completeRequestBody(
+      startedId,
+      drinkingVerified: true,
+      maxDrinkingStage: 'post_recording',
+      aiConfidence: 0.95,
+      aiDetails: details,
+    );
+
+    expect(body, <String, Object>{
+      'daily_medication_id': startedId,
+      'drinking_verified': true,
+      'max_drinking_stage': 'post_recording',
+      'ai_confidence': 0.95,
+      'ai_details': details,
+    });
+  });
+
+  test('confidence normalization converts percentage to 0.0 - 1.0 correctly', () {
+    double normalize(double score) {
+      if (score > 1.0) return score / 100.0;
+      return score;
+    }
+
+    expect(normalize(95.0), closeTo(0.95, 0.0001));
+    expect(normalize(80.0), closeTo(0.80, 0.0001));
+    expect(normalize(0.95), closeTo(0.95, 0.0001));
+    expect(normalize(0.80), closeTo(0.80, 0.0001));
+    expect(normalize(100.0), closeTo(1.0, 0.0001));
+  });
+
+  test('parses POST /vot/complete with ai_confidence and video_verification_id', () {
+    final VotCompleteResponse result =
+        VotCompleteResponse.fromJson(<String, dynamic>{
+      'daily_medication_id': 12,
+      'status': 'verified',
+      'vot_step': 'verified',
+      'completed_at': '2026-09-07T12:00:00Z',
+      'message': 'Verifikasi minum obat berhasil.',
+      'ai_confidence': 0.95,
+      'video_verification_id': 456,
+    });
+
+    expect(result.dailyMedicationId, 12);
+    expect(result.isFinalSuccess, isTrue);
+    expect(result.aiConfidence, 0.95);
+    expect(result.videoVerificationId, 456);
+  });
+
   test('null or invalid daily_medication_id yields no request body', () {
     expect(VotFlow.completeRequestBody(null), isNull);
     expect(VotFlow.completeRequestBody(0), isNull);
@@ -81,7 +187,7 @@ void main() {
     expect(result.isFinalSuccess, isFalse);
     expect(
       VotFlow.afterComplete(serverVerified: result.isFinalSuccess),
-      VerificationState.completing,
+      VerificationState.needsReview,
     );
   });
 
@@ -156,21 +262,14 @@ void main() {
     expect(error.message, ApiException.methodNotAllowedMessage);
     expect(
       VotFlow.afterComplete(serverVerified: false),
-      VerificationState.completing,
-    );
-    expect(
-      VotFlow.retryTarget(
-        state: VerificationState.completing,
-        phaseError: true,
-      ),
-      VotRetryTarget.complete,
+      VerificationState.needsReview,
     );
   });
 
-  test('drinking timeout stays on drinking and retries drinking only', () {
+  test('drinking timeout goes to needsReview', () {
     expect(
       VotFlow.afterDrinkingTimeout(),
-      VerificationState.drinking,
+      VerificationState.needsReview,
     );
     expect(
       VotFlow.afterDrinkingTimeout(),

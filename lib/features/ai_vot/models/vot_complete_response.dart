@@ -10,6 +10,8 @@ class VotCompleteResponse {
     this.canRetry = false,
     this.failureReason,
     this.maxDrinkingStage,
+    this.aiConfidence,
+    this.videoVerificationId,
   });
 
   final int dailyMedicationId;
@@ -21,6 +23,8 @@ class VotCompleteResponse {
   final bool canRetry;
   final String? failureReason;
   final String? maxDrinkingStage;
+  final double? aiConfidence;
+  final int? videoVerificationId;
 
   bool get isFinalSuccess => status.toLowerCase() == 'verified' && votStep.toLowerCase() == 'verified';
   bool get isNeedsReview => status.toLowerCase() == 'needs_review';
@@ -36,6 +40,8 @@ class VotCompleteResponse {
       canRetry: json['can_retry'] as bool? ?? false,
       failureReason: json['failure_reason']?.toString().trim(),
       maxDrinkingStage: json['max_drinking_stage']?.toString().trim(),
+      aiConfidence: (json['ai_confidence'] as num?)?.toDouble(),
+      videoVerificationId: (json['video_verification_id'] as num?)?.toInt(),
     );
   }
 }
