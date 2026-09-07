@@ -4,7 +4,6 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-import '../../ai_vot/pages/medicine_verification_page.dart';
 import '../models/my_medicine_schedule.dart';
 
 /// Daftar obat aktif milik pasien dari `GET /medicine-schedules/my`.
@@ -82,7 +81,6 @@ class MedicineListCard extends StatelessWidget {
               if (index > 0) const Divider(height: 1),
               _medicineTile(
                 context,
-                schedules[index], 
                 name: schedules[index].displayName,
                 dosage: schedules[index].dosage.trim().isEmpty
                     ? "Dosis belum tersedia"
@@ -97,23 +95,13 @@ class MedicineListCard extends StatelessWidget {
   }
 
   Widget _medicineTile(
-    BuildContext context,
-    MyMedicineSchedule schedule, {
+    BuildContext context, {
     required String name,
     required String dosage,
     required String badge,
   }) {
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MedicineVerificationPage(schedule: schedule),
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
           Container(
@@ -177,7 +165,6 @@ class MedicineListCard extends StatelessWidget {
           ),
         ],
       ),
-    ),
     );
   }
 }
