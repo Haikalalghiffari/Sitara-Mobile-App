@@ -102,6 +102,11 @@ class ApiEndpoints {
   /// `GET /medications/today`, daily medication milik pemegang token hari ini.
   static const String medicationsToday = '/medications/today';
 
+  /// `GET /medications/progress`, ringkasan kepatuhan milik pemegang token.
+  ///
+  /// Backend yang menghitung adherence dan streak; aplikasi hanya menampilkan.
+  static const String medicationsProgress = '/medications/progress';
+
   /// `POST /vot/start`, body JSON `medicine_schedule_id`.
   static const String votStart = '/vot/start';
 

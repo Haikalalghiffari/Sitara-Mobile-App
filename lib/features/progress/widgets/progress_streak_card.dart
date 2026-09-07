@@ -4,35 +4,29 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 
-import '../models/my_treatment.dart';
+import '../models/patient_progress.dart';
 
-/// Kartu runtutan harian.
-///
-/// Backend belum memiliki data verifikasi minum obat. Sementara ini, angka
-/// yang ditampilkan adalah `elapsedDays` dari [TreatmentProgress] — rumus
-/// tanggal yang sama dengan [ProgressTimelineCard], dihitung dari
-/// `therapy_start_date` sampai hari ini. Bukan streak verifikasi aktual.
-///
-// TODO: Saat backend sudah memiliki data actual medication adherence /
-// verified medication intake dari AI VOT atau medication verification, ganti
-// streak berbasis kalender ini dengan runtutan hari yang benar-benar
-// terverifikasi. Jangan menghitung streak dari therapy_start_date lagi.
+/// Kartu runtutan harian dari `streak_days` backend.
 class ProgressStreakCard extends StatelessWidget {
   const ProgressStreakCard({
     super.key,
-    this.progress,
+    this.patientProgress,
+    this.isLoading = false,
     this.errorMessage,
   });
 
-  /// Perhitungan waktu terapi yang sama dengan [ProgressTimelineCard].
-  final TreatmentProgress? progress;
-
+  final PatientProgress? patientProgress;
+  final bool isLoading;
   final String? errorMessage;
+
+  static const String loadingMessage = 'Memuat runtutan harian...';
+  static const String emptyStreakMessage =
+      'Belum ada runtutan hari terverifikasi.';
 
   @override
   Widget build(BuildContext context) {
-    final int? elapsedDays = progress?.elapsedDays;
-    final bool hasStreak = elapsedDays != null && elapsedDays > 0;
+    final int? streakDays = patientProgress?.streakDays;
+    final bool hasStreak = streakDays != null;
 
     return Container(
       width: double.infinity,
@@ -52,7 +46,6 @@ class ProgressStreakCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.08),
             ),
           ),
-
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -63,46 +56,48 @@ class ProgressStreakCard extends StatelessWidget {
                     color: Colors.white,
                     size: 22,
                   ),
-
                   const SizedBox(width: 8),
-
                   Text(
                     "RUNTUTAN HARIAN",
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: Colors.white,
-                          letterSpacing: 1,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      color: Colors.white,
+                      letterSpacing: 1,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 18),
-
               Text(
-                hasStreak ? "$elapsedDays Hari" : "Belum tersedia",
+                hasStreak ? "$streakDays Hari" : "Belum tersedia",
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-
               const SizedBox(height: 22),
-
               Text(
-                hasStreak
-                    ? "Anda telah mempertahankan rutinitas pengobatan dengan baik."
-                    : (errorMessage ??
-                        "Runtutan harian akan muncul setelah data pengobatan tersedia."),
+                _description(streakDays),
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Colors.white,
-                      height: 1.7,
-                    ),
+                  color: Colors.white,
+                  height: 1.7,
+                ),
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  String _description(int? streakDays) {
+    if (streakDays == null) {
+      if (isLoading) return loadingMessage;
+      if (errorMessage != null) return errorMessage!;
+      return "Runtutan harian akan muncul setelah data kepatuhan tersedia.";
+    }
+
+    if (streakDays <= 0) return emptyStreakMessage;
+    return "Anda telah mempertahankan rutinitas pengobatan dengan baik.";
   }
 }
