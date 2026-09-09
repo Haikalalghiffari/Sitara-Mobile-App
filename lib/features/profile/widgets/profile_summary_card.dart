@@ -130,6 +130,17 @@ class ProfileSummaryCard extends StatelessWidget {
                 ),
           ),
 
+          const SizedBox(height: 8),
+
+          Text(
+            "Username: ${user.username}",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+
           const SizedBox(height: 12),
 
           Container(

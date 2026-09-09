@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 
-import '../../ai_vot/pages/register_face_page.dart';
 import '../../profile/widgets/profile_menu_tile.dart';
 import '../../profile/pages/personal_information_page.dart';
 import '../widgets/settings_header.dart';
 import 'change_password_page.dart';
+import 'face_data_page.dart';
 
 /// Pusat pengaturan akun dan keamanan pasien SITARA.
 class SettingsPage extends StatelessWidget {
@@ -59,13 +59,13 @@ class SettingsPage extends StatelessWidget {
 
                   ProfileMenuTile(
                     icon: Icons.face_retouching_natural_outlined,
-                    title: 'Pendaftaran Wajah',
-                    subtitle: 'Kelola status foto wajah verifikasi',
+                    title: 'Data Wajah',
+                    subtitle: 'Kelola data wajah untuk verifikasi',
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const RegisterFacePage(),
+                          builder: (_) => const FaceDataPage(),
                         ),
                       );
                     },

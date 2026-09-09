@@ -166,12 +166,69 @@ void main() {
     expect(find.text('100%'), findsNothing);
     expect(find.text('Kepatuhan'), findsOneWidget);
   });
+
+  testWidgets('username tampil di bawah nama dari data user existing', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProfileSummaryCard(
+            patient: _patient(),
+            user: _user(username: 'blablala'),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Pasien Uji'), findsOneWidget);
+    expect(find.text('Username: blablala'), findsOneWidget);
+    expect(find.text('ID Pasien: RM-1'), findsOneWidget);
+  });
+
+  testWidgets('username tidak hardcoded dan mengikuti GET /auth/profile', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAuthService auth = _FakeAuthService(username: 'blablala');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfilePage(
+          authService: auth,
+          patientService: _FakePatientService(),
+          treatmentService: _FakeTreatmentService(),
+          patientProgressService: _FakeProgressService(
+            progress: const PatientProgress(
+              adherencePercentage: 80,
+              successfulOccurrences: 8,
+              failedOccurrences: 2,
+              pendingReviewOccurrences: 0,
+              finalDueOccurrences: 10,
+              streakDays: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Username: blablala'), findsOneWidget);
+
+    auth.username = 'usernamebaru';
+    await tester.ensureVisible(find.text('Settings'));
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Username: usernamebaru'), findsOneWidget);
+    expect(find.text('Username: blablala'), findsNothing);
+  });
 }
 
-UserProfile _user() {
-  return const UserProfile(
+UserProfile _user({String username = 'pasien'}) {
+  return UserProfile(
     id: 7,
-    username: 'pasien',
+    username: username,
     email: 'pasien@example.com',
     role: 'patient',
     isActive: true,
@@ -200,8 +257,12 @@ PatientProfile _patient() {
 }
 
 class _FakeAuthService extends AuthService {
+  _FakeAuthService({this.username = 'pasien'});
+
+  String username;
+
   @override
-  Future<UserProfile> getProfile() async => _user();
+  Future<UserProfile> getProfile() async => _user(username: username);
 
   @override
   Future<void> logout() async {}

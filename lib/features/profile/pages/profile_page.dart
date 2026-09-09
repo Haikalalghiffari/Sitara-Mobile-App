@@ -313,7 +313,9 @@ class _ProfilePageState extends State<ProfilePage> {
               SizedBox(height: 32),
 
               /// Menu
-              ProfileMenuSection(),
+              ProfileMenuSection(
+                onReturnFromSettings: _loadProfile,
+              ),
 
               SizedBox(height: 34),
 

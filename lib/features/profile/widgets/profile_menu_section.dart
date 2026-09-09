@@ -8,7 +8,14 @@ import '../../help/pages/help_center_page.dart';
 import '../../settings/pages/settings_page.dart';
 
 class ProfileMenuSection extends StatelessWidget {
-  const ProfileMenuSection({super.key});
+  const ProfileMenuSection({
+    super.key,
+    this.onReturnFromSettings,
+  });
+
+  /// Memakai pemuatan profil existing setelah Settings ditutup,
+  /// termasuk setelah Ubah Username.
+  final VoidCallback? onReturnFromSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -34,13 +41,14 @@ class ProfileMenuSection extends StatelessWidget {
           icon: Icons.settings_outlined,
           title: "Settings",
           subtitle: "Pengaturan akun dan profil",
-          onTap: () {
-            Navigator.push(
+          onTap: () async {
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => const SettingsPage(),
               ),
             );
+            onReturnFromSettings?.call();
           },
         ),
 
