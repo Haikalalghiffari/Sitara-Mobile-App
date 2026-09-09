@@ -39,6 +39,9 @@ class ApiEndpoints {
   /// `PUT /auth/change-password`, body `current_password` dan `new_password`.
   static const String changePassword = '/auth/change-password';
 
+  /// `PUT /auth/change-username`, body `new_username`.
+  static const String changeUsername = '/auth/change-username';
+
   static const String patientProfile = '/patients/profile';
 
   /// GET /treatments/my, daftar pengobatan milik pemegang token.

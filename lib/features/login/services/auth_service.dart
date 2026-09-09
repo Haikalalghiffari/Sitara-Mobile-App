@@ -137,6 +137,42 @@ class AuthService {
     }
   }
 
+  /// Mengirim `PUT /auth/change-username`.
+  ///
+  /// Backend menolak username kosong, yang sama dengan username saat ini, atau
+  /// yang sudah dipakai akun lain. Token sesi tetap berlaku setelah berhasil.
+  /// Pesan sukses diambil dari field `message` pada balasan server.
+  Future<String> changeUsername({
+    required String newUsername,
+  }) async {
+    try {
+      final Response<dynamic> response = await _apiClient.dio.put<dynamic>(
+        ApiEndpoints.changeUsername,
+        data: <String, String>{
+          'new_username': newUsername,
+        },
+      );
+
+      final dynamic data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw const ApiException(
+          'Format balasan ubah username tidak dikenali.',
+        );
+      }
+
+      final String message = data['message']?.toString().trim() ?? '';
+      if (message.isEmpty) {
+        throw const ApiException(
+          'Format balasan ubah username tidak dikenali.',
+        );
+      }
+
+      return message;
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
   /// Mengirim `POST /auth/activate`. Endpoint ini publik, tanpa Bearer.
   ///
   /// Sukses hanya jika server mengembalikan `message`. Tidak ada login otomatis.

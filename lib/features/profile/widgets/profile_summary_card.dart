@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 
 import '../../login/models/user_profile.dart';
 import '../../progress/models/my_treatment.dart';
+import '../../progress/models/patient_progress.dart';
 import '../../settings/pages/change_profile_picture_page.dart';
 import '../models/patient_profile.dart';
 
@@ -19,6 +20,7 @@ class ProfileSummaryCard extends StatelessWidget {
     required this.patient,
     required this.user,
     this.progress,
+    this.patientProgress,
   });
 
   final PatientProfile patient;
@@ -26,6 +28,9 @@ class ProfileSummaryCard extends StatelessWidget {
 
   /// Perhitungan waktu terapi yang sama dengan ProgressPage.
   final TreatmentProgress? progress;
+
+  /// Ringkasan kepatuhan dari `GET /medications/progress`.
+  final PatientProgress? patientProgress;
 
   /// Backend dapat mengirim `full_name` kosong bila data pasien belum
   /// dilengkapi petugas, sehingga username dipakai sebagai cadangan.
@@ -38,15 +43,9 @@ class ProfileSummaryCard extends StatelessWidget {
       ? "ID Pasien: ${patient.medicalRecordNumber}"
       : "ID User: ${user.id}";
 
-  /// Label kepatuhan yang sama dengan ProgressSummaryCard.
-  ///
-  /// Null/`—` bila belum ada treatment atau terapi belum berjalan, supaya
-  /// 100% tidak tampil tanpa data pengobatan.
-  String get _adherenceLabel {
-    final double? value = progress?.assumedAdherence;
-    if (value == null) return "—";
-    return "${(value * 100).round()}%";
-  }
+  /// Label kepatuhan yang sama dengan ProgressSummaryCard:
+  /// `PatientProgress.adherenceLabel` dari `adherence_percentage`.
+  String get _adherenceLabel => patientProgress?.adherenceLabel ?? "—";
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +154,7 @@ class ProfileSummaryCard extends StatelessWidget {
 
           // Masa pengobatan memakai TreatmentProgress.totalDays, rumus yang
           // sama dengan ProgressTimelineCard. Kepatuhan memakai
-          // assumedAdherence yang sama dengan ProgressSummaryCard.
+          // PatientProgress.adherenceLabel dari GET /medications/progress.
           IntrinsicHeight(
             child: Row(
               children: [

@@ -9,16 +9,22 @@ import '../../login/services/auth_service.dart';
 import '../widgets/settings_header.dart';
 import '../widgets/settings_save_button.dart';
 
-/// Form ubah kata sandi. Mengirim `PUT /auth/change-password`.
+/// Form ubah username dan kata sandi.
+///
+/// Username mengirim `PUT /auth/change-username`.
+/// Password mengirim `PUT /auth/change-password`.
 class ChangePasswordPage extends StatefulWidget {
-  const ChangePasswordPage({super.key});
+  const ChangePasswordPage({super.key, this.authService});
+
+  final AuthService? authService;
 
   @override
   State<ChangePasswordPage> createState() => _ChangePasswordPageState();
 }
 
 class _ChangePasswordPageState extends State<ChangePasswordPage> {
-  final AuthService _authService = AuthService();
+  late final AuthService _authService = widget.authService ?? AuthService();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _currentController = TextEditingController();
   final TextEditingController _newController = TextEditingController();
   final TextEditingController _confirmController = TextEditingController();
@@ -26,14 +32,22 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
-  bool _isSubmitting = false;
+  bool _isSubmittingUsername = false;
+  bool _isSubmittingPassword = false;
+
+  /// Batas yang sama dengan `ChangeUsernameRequest` di backend.
+  static const int _usernameMinLength = 3;
+  static const int _usernameMaxLength = 100;
 
   /// Batas yang sama dengan `ChangePasswordRequest` di backend.
   static const int _newPasswordMinLength = 8;
   static const int _passwordMaxLength = 72;
 
+  bool get _isBusy => _isSubmittingUsername || _isSubmittingPassword;
+
   @override
   void dispose() {
+    _usernameController.dispose();
     _currentController.dispose();
     _newController.dispose();
     _confirmController.dispose();
@@ -64,8 +78,66 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     );
   }
 
+  Future<void> _onSaveUsername() async {
+    if (_isBusy) return;
+
+    final String username = _usernameController.text.trim();
+
+    if (username.isEmpty) {
+      _showMessage("Silakan masukkan username baru.");
+      return;
+    }
+
+    if (username.length < _usernameMinLength) {
+      _showMessage("Username baru minimal $_usernameMinLength karakter.");
+      return;
+    }
+
+    if (username.length > _usernameMaxLength) {
+      _showMessage("Username terlalu panjang.");
+      return;
+    }
+
+    setState(() {
+      _isSubmittingUsername = true;
+    });
+
+    try {
+      final String message = await _authService.changeUsername(
+        newUsername: username,
+      );
+
+      if (!mounted) return;
+
+      _usernameController.clear();
+
+      _showMessage(
+        message,
+        backgroundColor: AppColors.primary,
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      _showMessage(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showMessage(ApiException.unexpectedMessage);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingUsername = false;
+        });
+      }
+    }
+  }
+
   Future<void> _onSave() async {
-    if (_isSubmitting) return;
+    if (_isBusy) return;
 
     final String current = _currentController.text;
     final String next = _newController.text;
@@ -100,7 +172,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     }
 
     setState(() {
-      _isSubmitting = true;
+      _isSubmittingPassword = true;
     });
 
     try {
@@ -134,7 +206,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     } finally {
       if (mounted) {
         setState(() {
-          _isSubmitting = false;
+          _isSubmittingPassword = false;
         });
       }
     }
@@ -159,9 +231,38 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SettingsHeader(title: "Ubah Password"),
+                  const SettingsHeader(title: "Ubah Username & Password"),
 
                   const SizedBox(height: 28),
+
+                  Text(
+                    "Masukkan username baru untuk akun Anda.",
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textSecondary,
+                          height: 1.5,
+                        ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  SitaraTextField(
+                    label: "Username Baru",
+                    labelIcon: Icons.person_outline_rounded,
+                    hint: "username baru",
+                    controller: _usernameController,
+                    readOnly: _isBusy,
+                    keyboardType: TextInputType.text,
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  SettingsSaveButton(
+                    label: "Ubah Username",
+                    isLoading: _isSubmittingUsername,
+                    onPressed: _onSaveUsername,
+                  ),
+
+                  const SizedBox(height: 32),
 
                   Text(
                     "Masukkan kata sandi saat ini dan kata sandi baru Anda.",
@@ -179,9 +280,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     hint: "••••••••",
                     controller: _currentController,
                     obscureText: _obscureCurrent,
-                    readOnly: _isSubmitting,
+                    readOnly: _isBusy,
                     suffixIcon: IconButton(
-                      onPressed: _isSubmitting
+                      onPressed: _isBusy
                           ? null
                           : () {
                               setState(
@@ -205,9 +306,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     hint: "••••••••",
                     controller: _newController,
                     obscureText: _obscureNew,
-                    readOnly: _isSubmitting,
+                    readOnly: _isBusy,
                     suffixIcon: IconButton(
-                      onPressed: _isSubmitting
+                      onPressed: _isBusy
                           ? null
                           : () {
                               setState(() => _obscureNew = !_obscureNew);
@@ -229,9 +330,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     hint: "••••••••",
                     controller: _confirmController,
                     obscureText: _obscureConfirm,
-                    readOnly: _isSubmitting,
+                    readOnly: _isBusy,
                     suffixIcon: IconButton(
-                      onPressed: _isSubmitting
+                      onPressed: _isBusy
                           ? null
                           : () {
                               setState(
@@ -251,7 +352,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
                   SettingsSaveButton(
                     label: "Ubah Password",
-                    isLoading: _isSubmitting,
+                    isLoading: _isSubmittingPassword,
                     onPressed: _onSave,
                   ),
                 ],

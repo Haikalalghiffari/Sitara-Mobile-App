@@ -25,19 +25,36 @@ import '../models/patient_profile.dart';
 import '../services/patient_service.dart';
 
 import '../../progress/models/my_treatment.dart';
+import '../../progress/models/patient_progress.dart';
+import '../../progress/services/patient_progress_service.dart';
 import '../../progress/services/treatment_service.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  const ProfilePage({
+    super.key,
+    this.authService,
+    this.patientService,
+    this.treatmentService,
+    this.patientProgressService,
+  });
+
+  final AuthService? authService;
+  final PatientService? patientService;
+  final TreatmentService? treatmentService;
+  final PatientProgressService? patientProgressService;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final AuthService _authService = AuthService();
-  final PatientService _patientService = PatientService();
-  final TreatmentService _treatmentService = TreatmentService();
+  late final AuthService _authService = widget.authService ?? AuthService();
+  late final PatientService _patientService =
+      widget.patientService ?? PatientService();
+  late final TreatmentService _treatmentService =
+      widget.treatmentService ?? TreatmentService();
+  late final PatientProgressService _patientProgressService =
+      widget.patientProgressService ?? PatientProgressService();
 
   UserProfile? _userProfile;
   PatientProfile? _patientProfile;
@@ -45,6 +62,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoading = true;
 
   List<MyTreatment> _treatments = <MyTreatment>[];
+  PatientProgress? _patientProgress;
 
   @override
   void initState() {
@@ -53,6 +71,7 @@ class _ProfilePageState extends State<ProfilePage> {
     // berulang setiap kali widget di-rebuild.
     _loadProfile();
     _loadTreatments();
+    _loadPatientProgress();
   }
 
   Future<void> _loadProfile() async {
@@ -127,6 +146,36 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _loadPatientProgress() async {
+    try {
+      final PatientProgress progress =
+          await _patientProgressService.getMyProgress();
+
+      if (!mounted) return;
+
+      setState(() {
+        _patientProgress = progress;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      if (error.statusCode == 401) {
+        await _handleExpiredSession();
+        return;
+      }
+
+      setState(() {
+        _patientProgress = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _patientProgress = null;
+      });
+    }
+  }
+
   /// Backend `GET /treatments/my` seharusnya hanya mengirim pengobatan milik
   /// pemegang token. Bila `patient_id` tidak cocok dengan profil yang sedang
   /// login, data tidak ditampilkan.
@@ -178,6 +227,7 @@ class _ProfilePageState extends State<ProfilePage> {
         onRetry: () {
           _loadProfile();
           _loadTreatments();
+          _loadPatientProgress();
         },
       );
     }
@@ -190,6 +240,7 @@ class _ProfilePageState extends State<ProfilePage> {
         patient: patient,
         user: user,
         progress: _currentTreatment?.progress,
+        patientProgress: _patientProgress,
       );
     }
 

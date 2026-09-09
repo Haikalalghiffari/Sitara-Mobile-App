@@ -75,8 +75,8 @@ class SettingsPage extends StatelessWidget {
 
                   ProfileMenuTile(
                     icon: Icons.lock_outline,
-                    title: 'Ubah Password',
-                    subtitle: 'Perbarui kata sandi akun',
+                    title: 'Ubah Username & Password',
+                    subtitle: 'Perbarui username dan kata sandi akun',
                     onTap: () {
                       Navigator.push(
                         context,
