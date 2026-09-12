@@ -4,13 +4,19 @@ import '../../../core/theme/colors.dart';
 import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 import '../models/verification_state.dart';
+import '../utils/vot_flow.dart';
 
-enum _IndicatorStatus { pending, active, done }
+enum _IndicatorStatus { pending, active, done, review }
 
 class VerificationIndicatorPanel extends StatelessWidget {
-  const VerificationIndicatorPanel({super.key, required this.state});
+  const VerificationIndicatorPanel({
+    super.key,
+    required this.state,
+    this.reviewOrigin = VotReviewOrigin.none,
+  });
 
   final VerificationState state;
+  final VotReviewOrigin reviewOrigin;
 
   @override
   Widget build(BuildContext context) {
@@ -31,24 +37,24 @@ class VerificationIndicatorPanel extends StatelessWidget {
             child: _IndicatorItem(
               icon: Icons.face_retouching_natural_outlined,
               label: "Wajah",
-              status: _faceStatus(state),
-              caption: _caption(_faceStatus(state)),
+              status: _faceStatus(state, reviewOrigin),
+              caption: _caption(_faceStatus(state, reviewOrigin)),
             ),
           ),
           Expanded(
             child: _IndicatorItem(
               icon: Icons.medication_outlined,
               label: "Obat",
-              status: _medicineStatus(state),
-              caption: _caption(_medicineStatus(state)),
+              status: _medicineStatus(state, reviewOrigin),
+              caption: _caption(_medicineStatus(state, reviewOrigin)),
             ),
           ),
           Expanded(
             child: _IndicatorItem(
               icon: Icons.local_drink_outlined,
               label: "Minum",
-              status: _drinkStatus(state),
-              caption: _caption(_drinkStatus(state)),
+              status: _drinkStatus(state, reviewOrigin),
+              caption: _caption(_drinkStatus(state, reviewOrigin)),
             ),
           ),
         ],
@@ -61,10 +67,17 @@ class VerificationIndicatorPanel extends StatelessWidget {
       _IndicatorStatus.pending => "Menunggu",
       _IndicatorStatus.active => "Proses",
       _IndicatorStatus.done => "Berhasil",
+      _IndicatorStatus.review => "Perlu review",
     };
   }
 
-  static _IndicatorStatus _faceStatus(VerificationState state) {
+  static _IndicatorStatus _faceStatus(
+    VerificationState state,
+    VotReviewOrigin origin,
+  ) {
+    if (state == VerificationState.needsReview) {
+      return _IndicatorStatus.done;
+    }
     return switch (state) {
       VerificationState.ready ||
       VerificationState.starting => _IndicatorStatus.pending,
@@ -74,12 +87,18 @@ class VerificationIndicatorPanel extends StatelessWidget {
       VerificationState.medicineMatched ||
       VerificationState.drinking ||
       VerificationState.completing ||
-      VerificationState.completed ||
+      VerificationState.completed => _IndicatorStatus.done,
       VerificationState.needsReview => _IndicatorStatus.done,
     };
   }
 
-  static _IndicatorStatus _medicineStatus(VerificationState state) {
+  static _IndicatorStatus _medicineStatus(
+    VerificationState state,
+    VotReviewOrigin origin,
+  ) {
+    if (state == VerificationState.needsReview) {
+      return _IndicatorStatus.done;
+    }
     return switch (state) {
       VerificationState.ready ||
       VerificationState.starting ||
@@ -89,17 +108,22 @@ class VerificationIndicatorPanel extends StatelessWidget {
       VerificationState.medicineMatched ||
       VerificationState.drinking ||
       VerificationState.completing ||
-      VerificationState.completed ||
+      VerificationState.completed => _IndicatorStatus.done,
       VerificationState.needsReview => _IndicatorStatus.done,
     };
   }
 
-  static _IndicatorStatus _drinkStatus(VerificationState state) {
+  static _IndicatorStatus _drinkStatus(
+    VerificationState state,
+    VotReviewOrigin origin,
+  ) {
+    if (state == VerificationState.needsReview) {
+      return _IndicatorStatus.review;
+    }
     return switch (state) {
       VerificationState.drinking ||
       VerificationState.completing => _IndicatorStatus.active,
-      VerificationState.completed ||
-      VerificationState.needsReview => _IndicatorStatus.done,
+      VerificationState.completed => _IndicatorStatus.done,
       _ => _IndicatorStatus.pending,
     };
   }
@@ -130,6 +154,10 @@ class _IndicatorItem extends StatelessWidget {
         AppColors.warning,
       ),
       _IndicatorStatus.done => (AppColors.successContainer, AppColors.success),
+      _IndicatorStatus.review => (
+        AppColors.warningContainer,
+        AppColors.warning,
+      ),
     };
 
     return Column(
@@ -141,7 +169,11 @@ class _IndicatorItem extends StatelessWidget {
           height: 44,
           decoration: BoxDecoration(color: background, shape: BoxShape.circle),
           child: Icon(
-            status == _IndicatorStatus.done ? Icons.check_rounded : icon,
+            status == _IndicatorStatus.done
+                ? Icons.check_rounded
+                : status == _IndicatorStatus.review
+                    ? Icons.hourglass_empty_rounded
+                    : icon,
             size: AppSpacing.iconMd,
             color: foreground,
           ),

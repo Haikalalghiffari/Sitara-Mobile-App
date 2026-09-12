@@ -1,4 +1,5 @@
 import '../models/daily_medication.dart';
+import 'vot_flow.dart';
 
 /// Ketersediaan jadwal AI-VOT dari `GET /medications/today`.
 enum VotScheduleKind {
@@ -32,9 +33,10 @@ class VotScheduleSnapshot {
 ///
 /// Prioritas:
 /// 1. `in_progress` → resume
-/// 2. `eligible == true` dan belum verified
-/// 3. upcoming (`eligible == false`, belum verified) → informasi saja
-/// 4. semua verified → selesai
+/// 2. `eligible == true` dan belum verified / belum video needs_review
+/// 3. sesi VOT gagal di wajah/obat (`needs_review` non-video) → tetap bisa mulai
+/// 4. upcoming (`eligible == false`, belum verified) → informasi saja
+/// 5. semua verified atau video needs_review → selesai
 class TodayMedicationPicker {
   const TodayMedicationPicker._();
 
@@ -94,17 +96,37 @@ class TodayMedicationPicker {
     );
   }
 
-  /// Item `eligible == true` yang belum verified. Null tidak dianggap true.
+  /// Item yang masih boleh mulai VOT. Face gagal 3x BUKAN finished.
   static bool _isBackendEligible(DailyMedication item) {
-    if (item.isServerVerified || item.isNeedsReview) return false;
-    return item.eligible == true;
+    if (VotFlow.isDoseFinishedForPatient(
+      status: item.status,
+      votStep: item.votStep,
+    )) {
+      return false;
+    }
+    if (item.eligible == true) return true;
+    return VotFlow.isIncompleteVotSession(
+      status: item.status,
+      votStep: item.votStep,
+    );
   }
 
   /// Upcoming: belum verified, `eligible == false`.
   static DailyMedication? nextUpcoming(List<DailyMedication> items) {
     final List<DailyMedication> upcoming = items
         .where((DailyMedication item) {
-          if (item.isServerVerified || item.isNeedsReview) return false;
+          if (VotFlow.isDoseFinishedForPatient(
+            status: item.status,
+            votStep: item.votStep,
+          )) {
+            return false;
+          }
+          if (VotFlow.isIncompleteVotSession(
+            status: item.status,
+            votStep: item.votStep,
+          )) {
+            return false;
+          }
           if (item.isInProgress) return false;
           if (item.eligible == false) return true;
           return item.eligible == null && item.isPending;

@@ -21,6 +21,8 @@ class VerificationActionButton extends StatelessWidget {
     this.onRetryComplete,
     this.onFinish,
     this.onTestAgain,
+    this.onRestart,
+    this.hasMaxAttempts = false,
   });
 
   final VerificationState state;
@@ -36,6 +38,8 @@ class VerificationActionButton extends StatelessWidget {
   final VoidCallback? onRetryComplete;
   final VoidCallback? onFinish;
   final VoidCallback? onTestAgain;
+  final VoidCallback? onRestart;
+  final bool hasMaxAttempts;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +60,40 @@ class VerificationActionButton extends StatelessWidget {
               onPressed: isBusy ? null : onFinish,
               icon: const Icon(Icons.check_rounded),
               label: const Text("Selesai"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
+                textStyle: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (hasMaxAttempts &&
+        (state == VerificationState.faceVerifying ||
+            state == VerificationState.medicineDetecting) &&
+        onRestart != null) {
+      return Column(
+        children: [
+          _button(
+            context,
+            label: "Mulai Ulang",
+            icon: Icons.refresh_rounded,
+            onPressed: onRestart,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          SizedBox(
+            width: double.infinity,
+            height: AppSpacing.buttonHeight,
+            child: OutlinedButton.icon(
+              onPressed: isBusy ? null : onFinish,
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text("Keluar"),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: const BorderSide(color: AppColors.primary),

@@ -100,6 +100,12 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   bool _isSyncingOnResume = false;
   bool _didLeave = false;
   bool _canTestAgain = false;
+  VotReviewOrigin _reviewOrigin = VotReviewOrigin.none;
+  int _sessionGeneration = 0;
+  final Set<int> _abandonedSessionIds = <int>{};
+  int _faceAttempts = 0;
+  int _medicineAttempts = 0;
+  bool _forceFreshStart = false;
 
   @override
   void initState() {
@@ -183,7 +189,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     if (_cameraController == null && _selected != null) {
       await _initializeCamera();
       if (!mounted) return;
-      await _syncSessionOnResume();
+      if (_state != VerificationState.ready && !_hasMaxAttempts) {
+        await _syncSessionOnResume();
+      }
       return;
     }
 
@@ -280,14 +288,39 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     await _loadTodayMedication();
   }
 
+  bool get _faceMaxAttempts => VotFlow.reachedMaxAttempts(_faceAttempts);
+  bool get _medicineMaxAttempts =>
+      VotFlow.reachedMaxAttempts(_medicineAttempts);
+  bool get _hasMaxAttempts =>
+      (_state == VerificationState.faceVerifying && _faceMaxAttempts) ||
+      (_state == VerificationState.medicineDetecting && _medicineMaxAttempts);
+
+  void _abandonCurrentSession() {
+    final int? id = _dailyMedicationId ?? _selected?.dailyMedicationId;
+    if (id != null && id > 0) {
+      _abandonedSessionIds.add(id);
+    }
+    _sessionGeneration++;
+    _dailyMedicationId = null;
+    _forceFreshStart = true;
+  }
+
+  bool _isAbandoned(int? id) {
+    return id != null && _abandonedSessionIds.contains(id);
+  }
+
   void _applyResumedSession(DailyMedication session) {
+    if (_isAbandoned(session.dailyMedicationId)) return;
     _dailyMedicationId = session.dailyMedicationId;
     final bool verified = VotFlow.isServerVerified(
       status: session.status,
       votStep: session.votStep,
     );
-    final bool needsReview = session.isNeedsReview;
-    if (verified || needsReview) {
+    final bool videoNeedsReview = VotFlow.isVideoNeedsReview(
+      status: session.status,
+      votStep: session.votStep,
+    );
+    if (verified || videoNeedsReview) {
       _completionGuard.markSuccess();
     }
     setState(() {
@@ -295,16 +328,40 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _statusError = null;
       if (verified) {
         _state = VerificationState.completed;
+        _reviewOrigin = VotReviewOrigin.none;
+        _faceAttempts = 0;
+        _medicineAttempts = 0;
         _feedbackMessage = "Verifikasi minum obat berhasil.";
         _phaseError = false;
         _isBusy = false;
-      } else if (needsReview) {
+      } else if (videoNeedsReview) {
         _state = VerificationState.needsReview;
+        _reviewOrigin = VotReviewOrigin.drinking;
         _feedbackMessage =
-            "Menunggu pemeriksaan tenaga kesehatan. Bukti video telah disimpan.";
+            "Verifikasi memerlukan review tenaga kesehatan.";
         _phaseError = false;
         _isBusy = false;
+      } else if (session.isNeedsReview ||
+          (session.attemptCount >= VotFlow.maxAttempts && !session.canRetry)) {
+        final bool atMedicine = session.votStep == 'face_verified';
+        if (atMedicine) {
+          _state = VerificationState.medicineDetecting;
+          _medicineAttempts = VotFlow.maxAttempts;
+          _faceAttempts = 0;
+          _feedbackMessage = VotFlow.medicineMaxAttemptMessage;
+        } else {
+          _state = VerificationState.faceVerifying;
+          _faceAttempts = VotFlow.maxAttempts;
+          _medicineAttempts = 0;
+          _feedbackMessage = VotFlow.faceMaxAttemptMessage;
+        }
+        _reviewOrigin = VotReviewOrigin.none;
+        _phaseError = true;
+        _isBusy = false;
       } else {
+        _reviewOrigin = VotReviewOrigin.none;
+        _faceAttempts = 0;
+        _medicineAttempts = 0;
         _state = VotFlow.afterSession(
           votStep: session.votStep,
           status: session.status,
@@ -322,6 +379,16 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         TodayMedicationPicker.inspect(today);
 
     if (snapshot.selected != null && snapshot.selected!.isInProgress) {
+      if (_isAbandoned(snapshot.selected!.dailyMedicationId)) {
+        setState(() {
+          _scheduleSnapshot = snapshot;
+          _selected = snapshot.selected;
+          _dailyMedicationId = null;
+          _state = VerificationState.ready;
+          _statusError = null;
+        });
+        return;
+      }
       final DailyMedication session = await _votService.getSession(
         snapshot.selected!.dailyMedicationId,
       );
@@ -398,7 +465,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   Future<void> _activateEligibleSchedule() async {
     if (!mounted || _selected == null) return;
-    if (_selected!.isInProgress) {
+    if (_selected!.isInProgress &&
+        !_isAbandoned(_selected!.dailyMedicationId)) {
       try {
         final DailyMedication session = await _votService.getSession(
           _selected!.dailyMedicationId,
@@ -422,14 +490,21 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
   Future<void> _syncSessionOnResume() async {
     final int? id = _dailyMedicationId;
     if (id == null) return;
+    if (_isAbandoned(id)) return;
     if (_completionGuard.inFlight) return;
     if (_state == VerificationState.completed) return;
+    if (_state == VerificationState.ready) return;
+    if (_faceMaxAttempts || _medicineMaxAttempts) return;
     if (_isSyncingOnResume) return;
     _isSyncingOnResume = true;
+    final int generation = _sessionGeneration;
 
     try {
       final DailyMedication session = await _votService.getSession(id);
       if (!mounted) return;
+      if (generation != _sessionGeneration) return;
+      if (_isAbandoned(id) || _isAbandoned(session.dailyMedicationId)) return;
+      if (_state == VerificationState.ready) return;
 
       if (VotFlow.isServerVerified(
         status: session.status,
@@ -439,11 +514,29 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         setState(() {
           _selected = session;
           _state = VerificationState.completed;
+          _reviewOrigin = VotReviewOrigin.none;
           _feedbackMessage = "Verifikasi minum obat berhasil.";
           _phaseError = false;
           _isBusy = false;
         });
         unawaited(_refreshCanTestAgain());
+        return;
+      }
+
+      if (VotFlow.isVideoNeedsReview(
+        status: session.status,
+        votStep: session.votStep,
+      )) {
+        _completionGuard.markSuccess();
+        setState(() {
+          _selected = session;
+          _state = VerificationState.needsReview;
+          _reviewOrigin = VotReviewOrigin.drinking;
+          _feedbackMessage =
+              "Verifikasi memerlukan review tenaga kesehatan.";
+          _phaseError = false;
+          _isBusy = false;
+        });
         return;
       }
 
@@ -459,7 +552,11 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
       setState(() {
         _selected = session;
-        _state = VotFlow.afterSession(votStep: session.votStep);
+        _state = VotFlow.afterSession(
+          votStep: session.votStep,
+          status: session.status,
+        );
+        _reviewOrigin = VotReviewOrigin.none;
         _phaseError = false;
       });
 
@@ -581,10 +678,13 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         _dailyMedicationId =
             picked.isInProgress ? picked.dailyMedicationId : null;
         _state = VerificationState.ready;
+        _reviewOrigin = VotReviewOrigin.none;
         _phaseError = false;
         _isBusy = false;
         _feedbackMessage = null;
         _statusError = null;
+        _faceAttempts = 0;
+        _medicineAttempts = 0;
         _detectionBox = null;
         _capturedImageSize = null;
         _detectionLabel = null;
@@ -708,7 +808,8 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     final DailyMedication? selected = _selected;
     if (selected == null || _isBusy) return;
 
-    if (selected.isInProgress) {
+    if (selected.isInProgress &&
+        !_isAbandoned(selected.dailyMedicationId)) {
       setState(() {
         _isBusy = true;
         _phaseError = false;
@@ -758,6 +859,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       _phaseError = false;
       _feedbackMessage = null;
       _state = VerificationState.starting;
+      _reviewOrigin = VotReviewOrigin.none;
     });
 
     try {
@@ -767,6 +869,9 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       if (!mounted) return;
 
       _dailyMedicationId = started.dailyMedicationId;
+      _abandonedSessionIds.remove(started.dailyMedicationId);
+      _faceAttempts = 0;
+      _medicineAttempts = 0;
       if (_dailyMedicationId == null || _dailyMedicationId! <= 0) {
         setState(() {
           _state = VerificationState.ready;
@@ -777,18 +882,43 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         });
         return;
       }
-      final VerificationState next = VotFlow.afterStart(
-        votStep: started.votStep,
-      );
+      final VerificationState next = () {
+        final VerificationState mapped = VotFlow.afterStart(
+          votStep: started.votStep,
+          status: started.status,
+        );
+        if (_forceFreshStart &&
+            mapped != VerificationState.completed &&
+            mapped != VerificationState.needsReview) {
+          return VerificationState.faceVerifying;
+        }
+        return mapped;
+      }();
+      _forceFreshStart = false;
       if (next == VerificationState.completed) {
         _completionGuard.markSuccess();
         unawaited(_refreshCanTestAgain());
       }
+      if (next == VerificationState.needsReview) {
+        _completionGuard.markSuccess();
+      }
 
       setState(() {
         _state = next;
+        _reviewOrigin = next == VerificationState.needsReview
+            ? VotReviewOrigin.drinking
+            : VotReviewOrigin.none;
         _isBusy = false;
+        if (next == VerificationState.needsReview) {
+          _feedbackMessage =
+              "Verifikasi memerlukan review tenaga kesehatan.";
+        }
       });
+
+      if (next == VerificationState.needsReview ||
+          next == VerificationState.completed) {
+        return;
+      }
 
       if (next == VerificationState.faceVerifying) {
         await _captureAndVerifyFace();
@@ -817,9 +947,37 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _restartVotFromBeginning() async {
+    if (_isBusy) return;
+    _abandonCurrentSession();
+    _completionGuard.reset();
+    _cancelDrinkingTimeout();
+    await _stopImageStream();
+    await _drinkingService.dispose();
+    _drinkingMachine.reset();
+    unawaited(_recordingService.cleanUpTemporaryVideo());
+    if (!mounted) return;
+    setState(() {
+      _state = VerificationState.ready;
+      _phaseError = false;
+      _isBusy = false;
+      _feedbackMessage = null;
+      _statusError = null;
+      _faceAttempts = 0;
+      _medicineAttempts = 0;
+      _reviewOrigin = VotReviewOrigin.none;
+      _detectionBox = null;
+      _capturedImageSize = null;
+      _detectionLabel = null;
+      _lastAnalysisResult = null;
+      _showDiagnosticCard = true;
+      _drinkingStartedAt = null;
+    });
+  }
+
   Future<void> _captureAndVerifyFace() async {
     final int? dailyId = _dailyMedicationId;
-    if (_isBusy) return;
+    if (_isBusy || _faceMaxAttempts) return;
     if (dailyId == null || dailyId <= 0) {
       setState(() {
         _state = VerificationState.faceVerifying;
@@ -861,9 +1019,15 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       );
       if (!mounted) return;
 
-      if (result.verified) {
+      final VerificationState next = VotFlow.afterFaceVerify(
+        verified: result.verified,
+      );
+
+      if (next == VerificationState.faceVerified) {
         setState(() {
           _state = VerificationState.faceVerified;
+          _reviewOrigin = VotReviewOrigin.none;
+          _faceAttempts = 0;
           _feedbackMessage = result.message.isNotEmpty
               ? result.message
               : "Wajah cocok dengan data pasien terdaftar.";
@@ -878,12 +1042,13 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
         return;
       }
 
-      if (!result.canRetry || result.attemptCount >= 3) {
+      _faceAttempts += 1;
+      if (_faceMaxAttempts) {
         setState(() {
-          _state = VerificationState.needsReview;
-          _phaseError = false;
-          _feedbackMessage =
-              "Batas percobaan tercapai. Verifikasi diteruskan ke tenaga kesehatan.";
+          _state = VerificationState.faceVerifying;
+          _reviewOrigin = VotReviewOrigin.none;
+          _phaseError = true;
+          _feedbackMessage = VotFlow.faceMaxAttemptMessage;
           _isBusy = false;
         });
         return;
@@ -930,7 +1095,7 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
 
   Future<void> _captureAndDetectMedicine() async {
     final int? dailyId = _dailyMedicationId;
-    if (_isBusy) return;
+    if (_isBusy || _medicineMaxAttempts) return;
     if (dailyId == null || dailyId <= 0) {
       setState(() {
         _state = VerificationState.medicineDetecting;
@@ -973,13 +1138,33 @@ class _AiVotPageState extends State<AiVotPage> with WidgetsBindingObserver {
       );
       if (!mounted) return;
 
-      if (result.medicineMatch) {
+      final VerificationState next = VotFlow.afterMedicineDetect(
+        medicineMatch: result.medicineMatch,
+      );
+
+      if (next == VerificationState.medicineMatched) {
         setState(() {
           _state = VerificationState.medicineMatched;
+          _reviewOrigin = VotReviewOrigin.none;
+          _medicineAttempts = 0;
           _detectionBox = result.boundingBox;
           _detectionLabel = result.detectedMedicine;
           _feedbackMessage = _medicineSuccessMessage(result);
           _phaseError = false;
+          _isBusy = false;
+        });
+        return;
+      }
+
+      _medicineAttempts += 1;
+      if (_medicineMaxAttempts) {
+        setState(() {
+          _state = VerificationState.medicineDetecting;
+          _reviewOrigin = VotReviewOrigin.none;
+          _detectionBox = result.boundingBox;
+          _detectionLabel = result.detectedMedicine;
+          _feedbackMessage = VotFlow.medicineMaxAttemptMessage;
+          _phaseError = true;
           _isBusy = false;
         });
         return;
@@ -1447,6 +1632,7 @@ failureReasonSent=$failureReasonSentStr
         unawaited(_recordingService.cleanUpTemporaryVideo());
         setState(() {
           _state = VerificationState.completed;
+          _reviewOrigin = VotReviewOrigin.none;
           _isBusy = false;
           _phaseError = false;
           _feedbackMessage = result.message.isNotEmpty
@@ -1457,15 +1643,16 @@ failureReasonSent=$failureReasonSentStr
         return;
       }
 
-      // Selalu anggap sebagai needsReview (menunggu verifikasi Nakes)
+      // needsReview != verified. Jangan lanjut auto-complete UI.
       _completionGuard.markSuccess();
       unawaited(_recordingService.cleanUpTemporaryVideo());
       setState(() {
         _state = VerificationState.needsReview;
+        _reviewOrigin = VotReviewOrigin.drinking;
         _isBusy = false;
         _phaseError = false;
         _feedbackMessage =
-            "Video minum obat berhasil dikirim. Laporan Anda sedang menunggu verifikasi tenaga kesehatan.";
+            "Verifikasi memerlukan review tenaga kesehatan.";
       });
       unawaited(_refreshCanTestAgain());
     } on ApiException catch (error) {
@@ -1700,8 +1887,9 @@ failureReasonSent=$failureReasonSentStr
                     const SizedBox(height: AppSpacing.lg),
                     Expanded(
                       flex: 3,
-                      child: VerificationCameraView(
+                      child:                     VerificationCameraView(
                         state: _state,
+                        reviewOrigin: _reviewOrigin,
                         cameraStatus: _cameraStatus,
                         controller: _cameraController,
                         onRetryCamera: _retryCamera,
@@ -1721,7 +1909,10 @@ failureReasonSent=$failureReasonSentStr
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const SizedBox(height: AppSpacing.lg),
-                            VerificationIndicatorPanel(state: _state),
+                            VerificationIndicatorPanel(
+                              state: _state,
+                              reviewOrigin: _reviewOrigin,
+                            ),
                             if (_lastAnalysisResult != null && _showDiagnosticCard) ...[
                               Builder(
                                 builder: (context) {
@@ -1766,14 +1957,15 @@ failureReasonSent=$failureReasonSentStr
                               state: _state,
                               isBusy: _isBusy,
                               hasPhaseError: _phaseError,
+                              hasMaxAttempts: _hasMaxAttempts,
                               onStart: canAct ? _onStartPressed : null,
-                              onRetryFace: canAct
+                              onRetryFace: canAct && !_faceMaxAttempts
                                   ? _captureAndVerifyFace
                                   : null,
-                              onDetectMedicine: canAct
+                              onDetectMedicine: canAct && !_medicineMaxAttempts
                                   ? _captureAndDetectMedicine
                                   : null,
-                              onRetryMedicine: canAct
+                              onRetryMedicine: canAct && !_medicineMaxAttempts
                                   ? _captureAndDetectMedicine
                                   : null,
                               onStartRecording: canAct
@@ -1785,6 +1977,9 @@ failureReasonSent=$failureReasonSentStr
                                   : null,
                               onRetryComplete: !_isBusy ? _retryComplete : null,
                               onFinish: () => unawaited(_leaveVot()),
+                              onRestart: !_isBusy
+                                  ? () => unawaited(_restartVotFromBeginning())
+                                  : null,
                               onTestAgain: _canTestAgain && !_isBusy
                                   ? () => unawaited(_testAgain())
                                   : null,

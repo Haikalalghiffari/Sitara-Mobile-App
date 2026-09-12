@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitara/features/ai_vot/models/camera_status.dart';
 import 'package:sitara/features/ai_vot/models/verification_state.dart';
 import 'package:sitara/features/ai_vot/utils/vot_completion_guard.dart';
+import 'package:sitara/features/ai_vot/utils/vot_flow.dart';
 import 'package:sitara/features/ai_vot/utils/vot_screen_awake.dart';
 import 'package:sitara/features/ai_vot/widgets/verification_action_button.dart';
 import 'package:sitara/features/ai_vot/widgets/verification_camera_view.dart';
@@ -220,6 +221,66 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Selesai'), findsOneWidget);
   });
+
+  testWidgets(
+    'video needsReview marks drinking as Perlu review, not all Berhasil',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: VerificationIndicatorPanel(
+              state: VerificationState.needsReview,
+              reviewOrigin: VotReviewOrigin.drinking,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Perlu review'), findsOneWidget);
+      expect(find.text('Berhasil'), findsNWidgets(2));
+    },
+  );
+
+  testWidgets(
+    'face max attempt shows Mulai Ulang and Keluar, not needsReview',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: VerificationActionButton(
+              state: VerificationState.faceVerifying,
+              hasPhaseError: true,
+              hasMaxAttempts: true,
+              onRestart: () {},
+              onFinish: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Mulai Ulang'), findsOneWidget);
+      expect(find.text('Keluar'), findsOneWidget);
+      expect(find.text('Kembali'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'completed still shows all three steps as Berhasil',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: VerificationIndicatorPanel(
+              state: VerificationState.completed,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Berhasil'), findsNWidgets(3));
+      expect(find.text('Perlu review'), findsNothing);
+    },
+  );
 
   test('exit and success pop guards fire only once', () {
     var leaves = 0;

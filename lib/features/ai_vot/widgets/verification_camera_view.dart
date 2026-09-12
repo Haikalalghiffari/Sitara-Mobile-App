@@ -8,6 +8,7 @@ import '../models/camera_status.dart';
 import '../models/verification_state.dart';
 import '../models/vot_medicine_detect_result.dart';
 import '../utils/bounding_box_mapper.dart';
+import '../utils/vot_flow.dart';
 import 'camera_frame_guide.dart';
 import 'medicine_bounding_box_overlay.dart';
 import 'medicine_detection_area.dart';
@@ -24,10 +25,12 @@ class VerificationCameraView extends StatelessWidget {
     this.capturedImageSize,
     this.detectionLabel,
     this.isFrontCamera = true,
+    this.reviewOrigin = VotReviewOrigin.none,
   });
 
   final VerificationState state;
   final CameraStatus cameraStatus;
+  final VotReviewOrigin reviewOrigin;
   final CameraController? controller;
   final VoidCallback? onRetryCamera;
   final MedicineBoundingBox? detectionBox;
@@ -109,7 +112,10 @@ class VerificationCameraView extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      VerificationStepIndicator(state: state),
+                      VerificationStepIndicator(
+                        state: state,
+                        reviewOrigin: reviewOrigin,
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Align(

@@ -45,9 +45,17 @@ class DailyMedication {
   /// Boleh mulai atau lanjut hanya jika backend mengizinkan.
   ///
   /// `eligible == true` adalah source of truth dari `GET /medications/today`.
-  /// Null tidak dianggap true.
+  /// Face/medicine `needs_review` bukan dosis selesai.
   bool get canStartOrResume {
-    if (isServerVerified) return false;
+    if (votStep == 'verified' && status == 'verified') return false;
+    if (status.toLowerCase() == 'needs_review') {
+      final String step = votStep.toLowerCase();
+      final bool videoReview = step == 'medicine_matched' ||
+          step == 'drinking' ||
+          step == 'completed';
+      if (videoReview) return false;
+      return true;
+    }
     if (isInProgress) return true;
     return eligible == true;
   }

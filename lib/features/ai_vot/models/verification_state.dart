@@ -45,7 +45,7 @@ extension VerificationStateX on VerificationState {
         VerificationState.completing => "Sedang mengunggah dan memproses...",
         VerificationState.completed => "Verifikasi minum obat berhasil.",
         VerificationState.needsReview =>
-          "Video minum obat berhasil dikirim. Menunggu verifikasi tenaga kesehatan.",
+          "Verifikasi memerlukan review tenaga kesehatan.",
       };
 
   bool get isProcessing => switch (this) {
@@ -83,8 +83,8 @@ extension VerificationStateX on VerificationState {
         VerificationState.drinking ||
         VerificationState.completing =>
           3,
-        VerificationState.completed ||
-        VerificationState.needsReview =>
-          4,
+        VerificationState.completed => 4,
+        // needsReview hanya setelah video analysis, bukan completed.
+        VerificationState.needsReview => 3,
       };
 }

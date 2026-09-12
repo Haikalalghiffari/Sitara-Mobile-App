@@ -5,6 +5,7 @@ import '../../../core/theme/radius.dart';
 import '../../../core/theme/spacing.dart';
 import '../models/camera_status.dart';
 import '../models/verification_state.dart';
+import '../utils/vot_flow.dart';
 
 /// Warna titik status sesuai state verifikasi.
 Color verificationStatusColor(VerificationState state) {
@@ -88,9 +89,14 @@ class VerificationStatusPill extends StatelessWidget {
 
 /// Indikator tahapan proses verifikasi. Contoh: "● ○ ○ ○".
 class VerificationStepIndicator extends StatelessWidget {
-  const VerificationStepIndicator({super.key, required this.state});
+  const VerificationStepIndicator({
+    super.key,
+    required this.state,
+    this.reviewOrigin = VotReviewOrigin.none,
+  });
 
   final VerificationState state;
+  final VotReviewOrigin reviewOrigin;
 
   @override
   Widget build(BuildContext context) {

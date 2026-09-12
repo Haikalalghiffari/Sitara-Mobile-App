@@ -250,6 +250,39 @@ void main() {
     expect(snapshot.message, TodayMedicationPicker.allFinishedMessage());
   });
 
+  test('face max-attempt needs_review is still selectable today', () {
+    final VotScheduleSnapshot snapshot = TodayMedicationPicker.inspect(
+      <DailyMedication>[
+        _item(
+          id: 1,
+          time: '08:00:00',
+          status: 'needs_review',
+          votStep: 'waiting',
+          eligible: false,
+        ),
+      ],
+    );
+    expect(snapshot.kind, VotScheduleKind.eligible);
+    expect(snapshot.selected?.dailyMedicationId, 1);
+    expect(snapshot.message, isNot(TodayMedicationPicker.allFinishedMessage()));
+  });
+
+  test('video needs_review remains finished for patient start', () {
+    final VotScheduleSnapshot snapshot = TodayMedicationPicker.inspect(
+      <DailyMedication>[
+        _item(
+          id: 1,
+          time: '08:00:00',
+          status: 'needs_review',
+          votStep: 'completed',
+          eligible: true,
+        ),
+      ],
+    );
+    expect(snapshot.kind, VotScheduleKind.finished);
+    expect(snapshot.selected, isNull);
+  });
+
   test('local clock does not override backend eligible false', () {
     final VotScheduleSnapshot snapshot = TodayMedicationPicker.inspect(
       <DailyMedication>[

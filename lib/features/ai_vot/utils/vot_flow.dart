@@ -1,11 +1,65 @@
 import '../models/verification_state.dart';
 
+/// `needsReview` hanya untuk video analysis, bukan face/medicine.
+enum VotReviewOrigin { none, drinking }
+
 /// Transisi UI setelah hasil backend, tanpa membuat ID sendiri.
 class VotFlow {
   const VotFlow._();
 
+  static const int maxAttempts = 3;
+
+  static const String faceMaxAttemptMessage =
+      'Verifikasi wajah belum berhasil setelah 3 percobaan.';
+
+  static const String medicineMaxAttemptMessage =
+      'Objek obat belum dapat diverifikasi. Silakan mulai ulang proses.';
+
+  static bool reachedMaxAttempts(int localAttempts) {
+    return localAttempts >= maxAttempts;
+  }
+
+  /// `needs_review` backend hanya dihormati setelah tahap minum/video.
+  static bool isVideoNeedsReview({
+    required String status,
+    required String votStep,
+  }) {
+    if (status.toLowerCase() != 'needs_review') return false;
+    return switch (votStep.toLowerCase()) {
+      'medicine_matched' || 'drinking' || 'completed' => true,
+      _ => false,
+    };
+  }
+
+  /// Jadwal sudah tidak boleh dimulai pasien: verified ATAU needs_review video.
+  ///
+  /// Face/medicine gagal (termasuk `status=needs_review` di tahap wajah)
+  /// bukan dosis selesai.
+  static bool isDoseFinishedForPatient({
+    required String status,
+    required String votStep,
+  }) {
+    if (isServerVerified(status: status, votStep: votStep)) return true;
+    return isVideoNeedsReview(status: status, votStep: votStep);
+  }
+
+  /// Gagal wajah/obat: sesi boleh dimulai ulang, jangan disembunyikan dari today.
+  static bool isIncompleteVotSession({
+    required String status,
+    required String votStep,
+  }) {
+    if (isDoseFinishedForPatient(status: status, votStep: votStep)) {
+      return false;
+    }
+    final String normalized = status.toLowerCase();
+    return normalized == 'needs_review' ||
+        normalized == 'in_progress' ||
+        normalized == 'failed' ||
+        normalized == 'cancelled';
+  }
+
   static VerificationState afterStart({required String votStep, String? status}) {
-    if (status?.toLowerCase() == 'needs_review') {
+    if (isVideoNeedsReview(status: status ?? '', votStep: votStep)) {
       return VerificationState.needsReview;
     }
     return switch (votStep) {
@@ -16,13 +70,23 @@ class VotFlow {
     };
   }
 
+  static VotReviewOrigin reviewOriginFromVotStep(String votStep) {
+    if (isVideoNeedsReview(status: 'needs_review', votStep: votStep)) {
+      return VotReviewOrigin.drinking;
+    }
+    return VotReviewOrigin.none;
+  }
+
+  static int reviewActiveStepCount(VotReviewOrigin origin) {
+    return origin == VotReviewOrigin.drinking ? 3 : 1;
+  }
+
   static VerificationState afterFaceVerify({
     required bool verified,
     bool canRetry = true,
     bool isNeedsReview = false,
   }) {
     if (verified) return VerificationState.faceVerified;
-    if (isNeedsReview || !canRetry) return VerificationState.needsReview;
     return VerificationState.faceVerifying;
   }
 
@@ -32,7 +96,6 @@ class VotFlow {
     bool isNeedsReview = false,
   }) {
     if (medicineMatch) return VerificationState.medicineMatched;
-    if (isNeedsReview || !canRetry) return VerificationState.needsReview;
     return VerificationState.medicineDetecting;
   }
 
@@ -93,7 +156,7 @@ class VotFlow {
     return VerificationState.needsReview;
   }
 
-  /// Timeout/gagal minum: langsung needsReview.
+  /// Timeout/gagal minum: needsReview khusus jalur video.
   static VerificationState afterDrinkingTimeout({
     bool canRetry = true,
     bool isNeedsReview = false,
@@ -109,8 +172,9 @@ class VotFlow {
   static VotRetryTarget? retryTarget({
     required VerificationState state,
     required bool phaseError,
+    bool maxAttemptsReached = false,
   }) {
-    if (!phaseError) return null;
+    if (!phaseError || maxAttemptsReached) return null;
     return switch (state) {
       VerificationState.faceVerifying => VotRetryTarget.face,
       VerificationState.medicineDetecting => VotRetryTarget.medicine,
